@@ -9,7 +9,7 @@ from agent.graph import build_graph
 ROOT = Path(__file__).resolve().parent
 
 # Provider chosen: Gemini. Changing the model means editing this one constant.
-GEMINI_MODEL = "gemini-2.5-flash"  # stable model id; check the Gemini API model list if it 404s
+GEMINI_MODEL = "gemini-3.8-flash"  # gemini-2.5-flash returned 404 for new users; check the Gemini API model list if this 404s
 
 
 def build_llm():
@@ -17,6 +17,13 @@ def build_llm():
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     return ChatGoogleGenerativeAI(model=GEMINI_MODEL, temperature=0)
+
+
+def to_text(content: str | list) -> str:
+    """Gemini may return a list of content blocks instead of a plain string; keep only the text parts."""
+    if isinstance(content, str):
+        return content
+    return "".join(block.get("text", "") for block in content if isinstance(block, dict))
 
 
 def new_state(question: str) -> dict:
@@ -41,7 +48,7 @@ def main() -> None:
         if not question:
             continue
         result = graph.invoke(new_state(question))
-        print(result["messages"][-1].content)
+        print(to_text(result["messages"][-1].content))
 
 
 if __name__ == "__main__":

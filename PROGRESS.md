@@ -11,9 +11,8 @@
 
 - **环境搭建**：已完成
 - **阶段 0（数据与账户准备）**：已完成并通过自检，用户已确认
-- **阶段 1（Task 1–3 最小 Agent）**：代码已完成，离线图检查通过；**真实 LLM 端到端测试待完成**
-  - 阻塞项：LLM 提供方未定（Groq 或 Gemini），且 `.env` 中还没有 key
-- **下一步**：用户选定提供方并填好 `.env` 后，运行 `python cli.py` 做一次真实提问，确认后进入阶段 2
+- **阶段 1（Task 1–3 最小 Agent）**：代码已完成，离线图检查通过；真实 Gemini 测试通过（单问题：AAPL MA5 = 184.68，与 CSV 一致），**等待用户确认**
+- **下一步**：用户确认阶段 1 后进入阶段 2（Task 4，MCP）
 
 ---
 
@@ -72,6 +71,9 @@
 | 2026-10-05 | System Prompt 在每次调用时拼接，不写入 messages | 避免历史中重复累积 |
 | 2026-10-05 | LLM 默认模型名 `llama-3.3-70b-versatile`，**未核实当前 Groq 模型目录** | 提供方尚未确定；如选 Gemini 需改 `build_llm()` |
 | 2026-10-05 | 阶段 1 每个问题是独立运行，不保留对话历史 | 记忆与 checkpoint 属于阶段 4（Task 7） |
+| 2026-10-05 | LLM 提供方选定 Gemini，使用 `langchain-google-genai`，key 读取 `GOOGLE_API_KEY` | 用户选择；Groq 不再使用 |
+| 2026-10-05 | 模型名从 `gemini-2.5-flash` 改为 `gemini-3.8-flash` | 2.5-flash 对新用户返回 404，错误信息建议 3.8-flash；3.8-flash 测试通过 |
+| 2026-10-05 | `cli.py` 增加 `to_text()`，只取 Gemini 返回内容块中的文本 | Gemini 的 content 可能是列表，直接打印会显示原始结构 |
 
 ---
 
@@ -108,3 +110,5 @@
   - 新建本文件 `PROGRESS.md`
   - 安装 `gh`（2.102.0），用户完成登录后，创建私有仓库 `hy86652/trading-agent` 并推送 `main`（`fe5829f`）
   - 用户确认阶段 0，开始阶段 1：完成 `agent/`（state、nodes、graph）、`cli.py`、`scripts/check_graph.py`；离线检查通过；`ChatGroq.bind_tools` 接受工具 schema。真实 LLM 测试待提供方与 key
+  - 用户选择 Gemini 并填写 `GOOGLE_API_KEY`。首次真实运行：`gemini-2.5-flash` 返回 404，改为 `gemini-3.8-flash`；一次 503（高负载）后重试成功
+  - 真实提问"AAPL 最近 5 日的 MA5"返回 184.68，与 CSV 计算结果一致。修复 `cli.py` 输出内容块列表的问题。等待用户确认阶段 1
