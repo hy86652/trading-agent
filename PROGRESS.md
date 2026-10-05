@@ -12,7 +12,8 @@
 - **环境搭建**：已完成
 - **阶段 0（数据与账户准备）**：已完成并通过自检，用户已确认
 - **阶段 1（Task 1–3 最小 Agent）**：已完成并通过用户确认（真实 Gemini 测试：AAPL MA5 = 184.68，与 CSV 一致；离线图检查通过）
-- **下一步**：进入阶段 2（Task 4，MCP）
+- **阶段 2（Task 4，MCP）**：代码已完成，离线检查通过（真实 MCP Server + 假 LLM，`tools/list` 与 `tools/call` 均经过 MCP）；**真实 Gemini 测试待配额恢复**，之后需用户确认
+- **下一步**：配额恢复后跑真实提问，确认回答与阶段 1 一致；用户确认后进入阶段 3（Task 5–6）
 
 ---
 
@@ -43,9 +44,11 @@
 | `tools.py` | 4 个工具的普通 Python 版本，内置 `_self_test` | 已完成，自检通过 |
 | `agent/state.py` | AgentState（Task 1），字段与 brief 第 5 节一致 | 已完成 |
 | `agent/nodes.py` | reasoner（只决策）与 tool_exec（路由到 tools.py）、System Prompt | 已完成 |
-| `agent/graph.py` | reasoner ⇄ tool_exec 最小循环 | 已完成 |
-| `cli.py` | 终端入口，每个问题独立运行，`build_llm()` 为唯一需改动的模型配置点 | 已完成，待真实测试 |
-| `scripts/check_graph.py` | 用脚本化假 LLM 检查循环（无需 key），运行：`python -m scripts.check_graph` | 已完成，通过 |
+| `agent/graph.py` | reasoner ⇄ tool_exec 循环，工具来自 MCP Client | 已完成 |
+| `mcp_server/server.py` | MCP Server（stdio），注册全部 4 个工具 | 阶段 2 新增，离线通过 |
+| `agent/mcp_client.py` | MCP Client：启动 Server，`tools/list` 发现工具，`tools/call` 调用；后台线程桥接同步节点 | 阶段 2 新增，离线通过 |
+| `cli.py` | 终端入口，会话期间保持 MCP Server 运行；`build_llm()` 为唯一需改动的模型配置点 | 已完成，真实测试待配额恢复 |
+| `scripts/check_graph.py` | 用脚本化假 LLM 检查循环（启动真实 MCP Server，无需 key），运行：`python -m scripts.check_graph` | 已完成，通过 |
 | `PROGRESS.md` | 本文件 | — |
 
 ---
@@ -72,6 +75,9 @@
 | 2026-10-05 | LLM 默认模型名 `llama-3.3-70b-versatile`，**未核实当前 Groq 模型目录** | 提供方尚未确定；如选 Gemini 需改 `build_llm()` |
 | 2026-10-05 | 阶段 1 每个问题是独立运行，不保留对话历史 | 记忆与 checkpoint 属于阶段 4（Task 7） |
 | 2026-10-05 | LLM 提供方选定 Gemini，使用 `langchain-google-genai`，key 读取 `GOOGLE_API_KEY` | 用户选择；Groq 不再使用 |
+| 2026-10-05 | 阶段 2：Server 注册全部 4 个工具，Agent 只绑定 3 个只读工具（`READ_ONLY_TOOL_NAMES`），`tool_exec` 同样拒绝未绑定的工具 | 保留 place_order 的安全约束；阶段 3 在 Agent 端放开并加 pre-hook 与审批（用户确认） |
+| 2026-10-05 | MCP Client 在后台线程的事件循环中持有会话，对外提供同步的 `call()` | LangGraph 节点为同步函数，MCP SDK 为异步；SDK 的 stdio 传输要求进出 task group 在同一个 task 中完成 |
+| 2026-10-05 | Server 的 `place_order` 在 Server 端仍可调用，但 Agent 不绑定；Server 的 stdout 只用于协议，不打印 | stdio 传输占用 stdout；安全由 Agent 端控制 |
 | 2026-10-05 | 模型名从 `gemini-2.5-flash` 改为 `gemini-3.8-flash` | 2.5-flash 对新用户返回 404，错误信息建议 3.8-flash；3.8-flash 测试通过 |
 | 2026-10-05 | `cli.py` 增加 `to_text()`，只取 Gemini 返回内容块中的文本 | Gemini 的 content 可能是列表，直接打印会显示原始结构 |
 
@@ -112,3 +118,4 @@
   - 用户确认阶段 0，开始阶段 1：完成 `agent/`（state、nodes、graph）、`cli.py`、`scripts/check_graph.py`；离线检查通过；`ChatGroq.bind_tools` 接受工具 schema。真实 LLM 测试待提供方与 key
   - 用户选择 Gemini 并填写 `GOOGLE_API_KEY`。首次真实运行：`gemini-2.5-flash` 返回 404，改为 `gemini-3.8-flash`；一次 503（高负载）后重试成功
   - 真实提问"AAPL 最近 5 日的 MA5"返回 184.68，与 CSV 计算结果一致。修复 `cli.py` 输出内容块列表的问题。用户确认阶段 1 完成。同步更新 `project_brief.md` 第 12 节：阶段 0、阶段 1 勾选。Gemini 免费档每日 20 次请求，本次测试中配额曾用完，等待恢复
+  - 开始阶段 2（MCP）：新增 `mcp_server/server.py`、`agent/mcp_client.py`；`nodes.py` 去掉硬编码工具字典；`graph.py`、`cli.py`、`scripts/check_graph.py` 改为通过 MCP Client 获取工具。离线检查通过；`bind_tools` 对 MCP 生成的 schema 转换正常；`cli.py` 启动与退出正常。真实 Gemini 测试待配额恢复

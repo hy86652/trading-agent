@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 
 from agent.graph import build_graph
+from agent.mcp_client import MCPToolClient
 
 ROOT = Path(__file__).resolve().parent
 
@@ -39,16 +40,18 @@ def new_state(question: str) -> dict:
 
 def main() -> None:
     load_dotenv(ROOT / ".env")
-    graph = build_graph(build_llm())
-    print("模拟交易助手（输入 quit 退出）")
-    while True:
-        question = input("> ").strip()
-        if question.lower() in ("quit", "exit"):
-            break
-        if not question:
-            continue
-        result = graph.invoke(new_state(question))
-        print(to_text(result["messages"][-1].content))
+    # The MCP server runs as a subprocess for the whole session and is shut down on exit.
+    with MCPToolClient() as mcp:
+        graph = build_graph(build_llm(), mcp)
+        print("模拟交易助手（输入 quit 退出）")
+        while True:
+            question = input("> ").strip()
+            if question.lower() in ("quit", "exit"):
+                break
+            if not question:
+                continue
+            result = graph.invoke(new_state(question))
+            print(to_text(result["messages"][-1].content))
 
 
 if __name__ == "__main__":
