@@ -10,8 +10,10 @@
 ## 1. 当前状态（最后更新：2026-10-05）
 
 - **环境搭建**：已完成
-- **阶段 0（数据与账户准备）**：已完成并通过自检，**等待用户确认**
-- **下一步**：阶段 1（Task 1–3 最小 Agent）。用户确认阶段 0 后再开始，不得提前进入
+- **阶段 0（数据与账户准备）**：已完成并通过自检，用户已确认
+- **阶段 1（Task 1–3 最小 Agent）**：代码已完成，离线图检查通过；**真实 LLM 端到端测试待完成**
+  - 阻塞项：LLM 提供方未定（Groq 或 Gemini），且 `.env` 中还没有 key
+- **下一步**：用户选定提供方并填好 `.env` 后，运行 `python cli.py` 做一次真实提问，确认后进入阶段 2
 
 ---
 
@@ -40,6 +42,11 @@
 | `data/prices/*.csv` | AAPL、MSFT、NVDA、GOOGL、AMZN，各 100 行 | 已生成 |
 | `data/portfolio.json` | 模拟账户，初始现金 100,000，无持仓 | 已创建 |
 | `tools.py` | 4 个工具的普通 Python 版本，内置 `_self_test` | 已完成，自检通过 |
+| `agent/state.py` | AgentState（Task 1），字段与 brief 第 5 节一致 | 已完成 |
+| `agent/nodes.py` | reasoner（只决策）与 tool_exec（路由到 tools.py）、System Prompt | 已完成 |
+| `agent/graph.py` | reasoner ⇄ tool_exec 最小循环 | 已完成 |
+| `cli.py` | 终端入口，每个问题独立运行，`build_llm()` 为唯一需改动的模型配置点 | 已完成，待真实测试 |
+| `scripts/check_graph.py` | 用脚本化假 LLM 检查循环（无需 key），运行：`python -m scripts.check_graph` | 已完成，通过 |
 | `PROGRESS.md` | 本文件 | — |
 
 ---
@@ -58,14 +65,21 @@
 | 2026-10-05 | 指标参数用字符串表示，如 `"MA5"`、`"RSI14"`；RSI 使用 Wilder 平滑 | 便于 LLM 直接传参；Wilder 是常用约定 |
 | 2026-10-05 | 工具错误统一返回 `{"error": "..."}` | 调用方只需检查一个键 |
 | 2026-10-05 | 阶段 0 的 `place_order` 立即成交，只做基本检查 | pre-hook 与 HITL 属于阶段 3，按计划分阶段实现 |
-| 2026-10-05 | 目录结构沿用 brief 第 8 节，但暂未创建 `agent/`、`mcp_server/`、`api/`、`eval/` | 按阶段逐步创建，不提前建空目录 |
+| 2026-10-05 | 目录结构沿用 brief 第 8 节，但暂未创建 `mcp_server/`、`api/`、`eval/` | 按阶段逐步创建，不提前建空目录 |
+| 2026-10-05 | 阶段 1 只向 LLM 绑定 3 个只读工具，**不绑定 `place_order`** | 下单需先经过 pre-hook（Task 5）和 HITL（Task 6），提前开放有风险 |
+| 2026-10-05 | 工具函数直接用 `StructuredTool.from_function` 包装，不改 `tools.py` | 保持阶段 0 的函数签名稳定，MCP 迁移时更容易替换 |
+| 2026-10-05 | 工具执行错误（未知工具、参数错误）作为数据返回给 LLM，不抛异常 | 让 reasoner 能根据错误自我纠正（brief 第 4 节要求） |
+| 2026-10-05 | System Prompt 在每次调用时拼接，不写入 messages | 避免历史中重复累积 |
+| 2026-10-05 | LLM 默认模型名 `llama-3.3-70b-versatile`，**未核实当前 Groq 模型目录** | 提供方尚未确定；如选 Gemini 需改 `build_llm()` |
+| 2026-10-05 | 阶段 1 每个问题是独立运行，不保留对话历史 | 记忆与 checkpoint 属于阶段 4（Task 7） |
 
 ---
 
 ## 5. 待办与待确认事项
 
 - [ ] **用户确认阶段 0 的结果**（确认前不进入阶段 1）
-- [ ] **LLM 提供方**：Groq 还是 Gemini，由用户在 `.env` 中决定。两个包都已安装，但尚未选定
+- [ ] **LLM 提供方**：Groq 还是 Gemini，由用户在 `.env` 中决定。两个包都已安装，但尚未选定。**阻塞阶段 1 的真实测试**
+- [ ] **Groq 模型名核实**：`llama-3.3-70b-versatile` 未在线核实，首次真实运行时若报模型不存在，需改为当前可用模型
 - [ ] **Post-tool Hook 具体做哪几项**：brief 第 4 节要求实现前与用户确认
 - [x] **首次 git 提交与远程仓库**：已提交 `fe5829f` 并推送到私有仓库。`.env` 未被提交
 - [ ] **后续提交策略**：每个阶段结束后是否提交、推送，由用户决定
@@ -93,3 +107,4 @@
   - 在 `project_brief.md` 中勾选"环境搭建"
   - 新建本文件 `PROGRESS.md`
   - 安装 `gh`（2.102.0），用户完成登录后，创建私有仓库 `hy86652/trading-agent` 并推送 `main`（`fe5829f`）
+  - 用户确认阶段 0，开始阶段 1：完成 `agent/`（state、nodes、graph）、`cli.py`、`scripts/check_graph.py`；离线检查通过；`ChatGroq.bind_tools` 接受工具 schema。真实 LLM 测试待提供方与 key
