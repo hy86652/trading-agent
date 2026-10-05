@@ -8,15 +8,15 @@ from agent.graph import build_graph
 
 ROOT = Path(__file__).resolve().parent
 
-# Model choice is pending the user's decision (Groq or Gemini). Changing it means editing this one function.
-GROQ_MODEL = "llama-3.3-70b-versatile"  # not verified against the current Groq catalogue
+# Provider chosen: Gemini. Changing the model means editing this one constant.
+GEMINI_MODEL = "gemini-2.5-flash"  # stable model id; check the Gemini API model list if it 404s
 
 
 def build_llm():
-    """Create the chat model. langchain-groq reads GROQ_API_KEY from the environment."""
-    from langchain_groq import ChatGroq
+    """Create the chat model. langchain-google-genai reads GOOGLE_API_KEY from the environment."""
+    from langchain_google_genai import ChatGoogleGenerativeAI
 
-    return ChatGroq(model=GROQ_MODEL, temperature=0)
+    return ChatGoogleGenerativeAI(model=GEMINI_MODEL, temperature=0)
 
 
 def new_state(question: str) -> dict:
