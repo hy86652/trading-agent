@@ -22,7 +22,9 @@
 - 虚拟环境：`D:\github\trading-agent\.venv`，由 `python -m venv` 创建（自带 pip）
 - 激活（PowerShell）：`.\.venv\Scripts\Activate.ps1`。尚未测试该命令，如遇执行策略报错，需用户决定是否修改策略
 - 安装依赖时使用：`.\.venv\Scripts\python.exe -m pip install ...`
-- Git：已 `git init`，**尚未提交任何内容**
+- Git：分支 `main`，远程 origin 为 `https://github.com/hy86652/trading-agent`（私有仓库，账户 hy86652）
+- 已提交并推送：`fe5829f`（初始提交，阶段 0 相关文件）
+- 推送方式：`gh` 已安装并登录（账户 hy86652）。PowerShell 中若找不到 `gh`，需先刷新 PATH
 - Docker：未安装（部署阶段需要）
 
 ---
@@ -65,7 +67,8 @@
 - [ ] **用户确认阶段 0 的结果**（确认前不进入阶段 1）
 - [ ] **LLM 提供方**：Groq 还是 Gemini，由用户在 `.env` 中决定。两个包都已安装，但尚未选定
 - [ ] **Post-tool Hook 具体做哪几项**：brief 第 4 节要求实现前与用户确认
-- [ ] **首次 git 提交**：尚未提交。是否提交、提交哪些文件，需用户决定。`.env` 不得提交
+- [x] **首次 git 提交与远程仓库**：已提交 `fe5829f` 并推送到私有仓库。`.env` 未被提交
+- [ ] **后续提交策略**：每个阶段结束后是否提交、推送，由用户决定
 - [ ] **Docker**：部署阶段（阶段 6）前需安装
 - [ ] **`PROJECT.md` 与 `project_brief.md`**：brief 第 8 节写的是 `PROJECT.md`，实际文件名是 `project_brief.md`。目前以 `project_brief.md` 为准
 - [ ] **项目位置**：brief 与项目分属两个目录。是否需要统一，待用户决定
@@ -89,3 +92,4 @@
   - 完成阶段 0：数据生成脚本、模拟账户、`tools.py` 及自检（全部通过）
   - 在 `project_brief.md` 中勾选"环境搭建"
   - 新建本文件 `PROGRESS.md`
+  - 安装 `gh`（2.102.0），用户完成登录后，创建私有仓库 `hy86652/trading-agent` 并推送 `main`（`fe5829f`）
