@@ -57,7 +57,8 @@
 | `agent/hooks.py` | Pre-tool hook (validation, 400 errors) and post-tool hook (summary, truncation, log) | Done |
 | `agent/graph.py` | Graph wiring and routing | Done |
 | `agent/mcp_client.py` | MCP client: starts the server, `tools/list`, `tools/call`, background event loop | Done, offline check passes |
-| `agent/observability.py` | Turns tracing off when no Langfuse keys are set | Done |
+| `agent/observability.py` | Tracing switch. Without keys, no Langfuse client is created; a no-op tracer is used instead | Done |
+| `agent/runtime.py` | Shared settings and helpers: model name, checkpoint path, `build_llm()`, `question_input()`, logging setup | Done |
 | `mcp_server/server.py` | MCP server (stdio), registers all 4 tools | Done, offline check passes |
 | `cli.py` | Terminal entry point. Keeps the MCP server running for the session. `build_llm()` is the only place to change the model | Done. Real test pending |
 | `api/main.py` | FastAPI app: `/webhook`, `/approve`, `/health` | Done, offline check passes |
@@ -102,6 +103,10 @@
 | 2026-10-07 | Post-tool hook, three parts: fill summary (`place_order` filled), truncation above 4000 characters, and each tool call written to `data/logs/tool_calls.jsonl` (gitignored) | Confirmed by the user. The truncation limit is set high because current outputs are short |
 | 2026-10-07 | Langfuse uses the core SDK (`observe`, `start_as_current_observation`), not the `langchain` package | The user chose option B. brief forbids dependencies it does not mention |
 | 2026-10-07 | `cli.py` prints a short error when one question fails and keeps the session running. Quota errors no longer exit the program | A quota error used to exit the program, and the next question was then run as a shell command |
+| 2026-10-07 | Shared helpers moved from `cli.py` to `agent/runtime.py`. The API, the evaluation scripts and the checks no longer import the terminal entry point | The API imported `cli.py`, which mixed terminal code with shared logic |
+| 2026-10-07 | Logging: the MCP client logs `tools/list` and `tools/call` at INFO; the MCP server shows only warnings. Set `LOG_LEVEL=INFO` to see the details | Replaces the ad-hoc `print` calls; quiet by default |
+| 2026-10-07 | Without Langfuse keys, no client is created (no-op tracer). Creating a client without keys printed an authentication warning on every call | Keeps the terminal and the checks free of warnings |
+| 2026-10-07 | `eval/record.py` retries a failed case up to 3 times with a 20 s pause; a case that still fails is reported and skipped | Free-tier quota and network errors are expected during recording |
 | 2026-10-07 | All project text converted to English: code comments and docstrings, user-facing messages, prompts, README, this log, and the test cases | The user asked for it. The agent's replies follow the language of the user's question, so Chinese questions still get Chinese answers |
 
 ---

@@ -94,7 +94,7 @@ def judge_trace(trace: dict[str, Any], llm: Any, attempts: int = 3, pause_second
 
 
 def main() -> None:
-    from cli import build_llm  # imported here so the judge module itself needs no API key
+    from agent.runtime import build_llm  # imported here so the judge module itself needs no API key
 
     traces = load_traces()
     if not traces:

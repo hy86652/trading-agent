@@ -26,9 +26,7 @@ from agent.graph import build_graph
 from agent.mcp_client import MCPToolClient
 from agent.nodes import to_text
 from agent.observability import disable_tracing_without_keys
-from cli import CHECKPOINT_PATH, build_llm, question_input
-
-ROOT = Path(__file__).resolve().parent.parent
+from agent.runtime import CHECKPOINT_PATH, ROOT, build_llm, configure_logging, question_input
 
 
 class QuestionIn(BaseModel):
@@ -86,6 +84,7 @@ def create_app(llm_factory: Callable[[], Any] = build_llm, checkpoint_path: Path
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         load_dotenv(ROOT / ".env")
+        configure_logging()
         disable_tracing_without_keys()
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         with MCPToolClient() as mcp, closing(sqlite3.connect(checkpoint_path, check_same_thread=False)) as conn:

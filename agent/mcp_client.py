@@ -7,18 +7,21 @@ methods block until the result is ready.
 import asyncio
 import concurrent.futures
 import json
+import logging
 import sys
 import threading
 from pathlib import Path
 from typing import Any
 
 from langchain_core.tools import StructuredTool
-from langfuse import get_client
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from agent.observability import tracer
+
 ROOT = Path(__file__).resolve().parent.parent
 CALL_TIMEOUT_SECONDS = 60
+logger = logging.getLogger(__name__)
 
 
 class MCPToolClient:
@@ -75,7 +78,7 @@ class MCPToolClient:
     def list_tools(self) -> list[Any]:
         """Send tools/list and return the server's tool descriptions (name, description, inputSchema)."""
         result = self._run(self._session.list_tools())
-        print(f"[mcp] tools/list -> {[t.name for t in result.tools]}", file=sys.stderr)
+        logger.info("tools/list -> %s", [t.name for t in result.tools])
         return result.tools
 
     def langchain_tools(self) -> list[StructuredTool]:
@@ -98,7 +101,7 @@ class MCPToolClient:
     def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Send tools/call and return the tool's dict result. Server-side errors come back as {"error": ...}."""
         request = {"method": "tools/call", "params": {"name": name, "arguments": arguments}}
-        with get_client().start_as_current_observation(name=f"mcp tools/call {name}", as_type="tool", input=request) as span:
+        with tracer().start_as_current_observation(name=f"mcp tools/call {name}", as_type="tool", input=request) as span:
             result = self._run(self._session.call_tool(name, arguments))
             text = "".join(block.text for block in result.content if hasattr(block, "text"))
             output = {"error": text} if result.isError else self._parse(text)

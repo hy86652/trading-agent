@@ -7,6 +7,7 @@ Run from the project root with: python -m scripts.check_graph
 """
 import contextlib
 import json
+import os
 import sqlite3
 import tempfile
 import uuid
@@ -21,7 +22,7 @@ from agent.graph import build_graph
 from agent.hooks import MAX_CONSECUTIVE_ERRORS
 from agent.mcp_client import MCPToolClient
 from agent.nodes import allowed_tools, make_summarizer
-from cli import question_input
+from agent.runtime import question_input
 
 PORTFOLIO_PATH = Path(__file__).resolve().parent.parent / "data" / "portfolio.json"
 
@@ -261,6 +262,7 @@ def check_post_hook_truncates_and_logs() -> None:
 
 
 def main() -> None:
+    os.environ["LANGFUSE_TRACING_ENABLED"] = "false"  # offline checks never send traces
     check_summary_cut_keeps_tool_pairs()
     check_post_hook_truncates_and_logs()
     with MCPToolClient() as mcp:

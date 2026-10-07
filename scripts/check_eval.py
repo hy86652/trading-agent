@@ -3,6 +3,7 @@
 Run from the project root with: python -m scripts.check_eval
 """
 import json
+import os
 
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
@@ -74,6 +75,28 @@ def check_record_case(mcp: MCPToolClient) -> None:
     assert "Assistant calls tools: place_order" in text and "OK, cancelled." in text, text
 
 
+def check_record_retries_failed_case() -> None:
+    """A case that fails once (quota or network) is retried, and the second attempt is recorded."""
+    from langchain_core.messages import HumanMessage
+
+    from eval.record import record_with_retries
+
+    class FlakyGraph:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def invoke(self, state, config=None):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("429 quota")
+            return {"messages": [HumanMessage(content="question"), AIMessage(content="answer")]}
+
+    graph = FlakyGraph()
+    trace = record_with_retries(graph, {"id": "r", "question": "question", "decision": "reject"}, attempts=2, pause_seconds=0)
+    assert graph.calls == 2, graph.calls
+    assert trace["transcript"][-1]["content"] == "answer"
+
+
 def check_transcript_is_json_serialisable() -> None:
     from langchain_core.messages import HumanMessage
 
@@ -82,10 +105,12 @@ def check_transcript_is_json_serialisable() -> None:
 
 
 def main() -> None:
+    os.environ["LANGFUSE_TRACING_ENABLED"] = "false"  # offline checks never send traces
     check_parse_judgement()
     check_judge_retries_bad_replies()
     check_judge_gives_up_after_attempts()
     check_transcript_is_json_serialisable()
+    check_record_retries_failed_case()
     with MCPToolClient() as mcp:
         check_record_case(mcp)
     print("eval checks passed")

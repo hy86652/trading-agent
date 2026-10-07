@@ -9,9 +9,9 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
-from langfuse import get_client
 from langgraph.types import interrupt
 
+from agent.observability import tracer
 from agent.state import AgentState
 
 # The server offers four tools and the LLM may see all of them. place_order is only
@@ -72,7 +72,7 @@ def make_reasoner(llm: Any, tools: list[StructuredTool]) -> Callable[[AgentState
         system = SYSTEM_PROMPT
         if state.get("summary"):
             system += f"\n\nEarlier conversation summary (for reference only; values come from tools):\n{state['summary']}"
-        with get_client().start_as_current_observation(
+        with tracer().start_as_current_observation(
             name="llm_reasoner", as_type="generation", input=state["messages"][-1].content
         ) as generation:
             response = model.invoke([SystemMessage(system)] + state["messages"])
@@ -98,7 +98,7 @@ def make_summarizer(llm: Any) -> Callable[[AgentState], dict[str, Any]]:
             SystemMessage(SUMMARY_PROMPT),
             HumanMessage(content=f"Existing summary: {state.get('summary') or 'none'}\n\nConversation to compress:\n{transcript}"),
         ]
-        with get_client().start_as_current_observation(
+        with tracer().start_as_current_observation(
             name="llm_summarize", as_type="generation", input=transcript
         ) as generation:
             response = llm.invoke(prompt)
