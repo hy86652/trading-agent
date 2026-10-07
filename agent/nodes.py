@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
+from langfuse import get_client
 from langgraph.types import interrupt
 
 from agent.state import AgentState
@@ -48,9 +49,20 @@ def to_text(content: str | list) -> str:
     return "".join(block.get("text", "") for block in content if isinstance(block, dict))
 
 
+def record_llm_call(generation: Any, response: Any, model_name: str | None) -> None:
+    """Attach the model name, output and token counts to a Langfuse generation span (a no-op without keys)."""
+    usage = getattr(response, "usage_metadata", None) or {}
+    generation.update(
+        model=model_name,
+        output=to_text(response.content) or str(getattr(response, "tool_calls", "")),
+        usage_details={"input": usage.get("input_tokens", 0), "output": usage.get("output_tokens", 0)} if usage else None,
+    )
+
+
 def make_reasoner(llm: Any, tools: list[StructuredTool]) -> Callable[[AgentState], dict[str, list]]:
     """Return the reasoner node with the given tools bound to the LLM."""
     model = llm.bind_tools(tools)
+    model_name = getattr(llm, "model", None)
 
     def reasoner(state: AgentState) -> dict[str, list]:
         # The system prompt and the summary are prepended per call, not stored in messages,
@@ -58,7 +70,11 @@ def make_reasoner(llm: Any, tools: list[StructuredTool]) -> Callable[[AgentState
         system = SYSTEM_PROMPT
         if state.get("summary"):
             system += f"\n\n早前对话摘要（仅供参考，数值以工具返回为准）：\n{state['summary']}"
-        response = model.invoke([SystemMessage(system)] + state["messages"])
+        with get_client().start_as_current_observation(
+            name="llm_reasoner", as_type="generation", input=state["messages"][-1].content
+        ) as generation:
+            response = model.invoke([SystemMessage(system)] + state["messages"])
+            record_llm_call(generation, response, model_name)
         return {"messages": [response]}
 
     return reasoner
@@ -66,6 +82,7 @@ def make_reasoner(llm: Any, tools: list[StructuredTool]) -> Callable[[AgentState
 
 def make_summarizer(llm: Any) -> Callable[[AgentState], dict[str, Any]]:
     """Return the summarize node. It compresses the oldest messages with a separate LLM call (no tools bound)."""
+    model_name = getattr(llm, "model", None)
 
     def summarize(state: AgentState) -> dict[str, Any]:
         messages = state["messages"]
@@ -79,7 +96,12 @@ def make_summarizer(llm: Any) -> Callable[[AgentState], dict[str, Any]]:
             SystemMessage(SUMMARY_PROMPT),
             HumanMessage(content=f"已有摘要：{state.get('summary') or '无'}\n\n需要压缩的对话：\n{transcript}"),
         ]
-        summary = to_text(llm.invoke(prompt).content)
+        with get_client().start_as_current_observation(
+            name="llm_summarize", as_type="generation", input=transcript
+        ) as generation:
+            response = llm.invoke(prompt)
+            record_llm_call(generation, response, model_name)
+        summary = to_text(response.content)
         return {"summary": summary, "messages": [RemoveMessage(id=m.id) for m in old]}
 
     return summarize

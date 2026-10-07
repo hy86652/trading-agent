@@ -159,6 +159,7 @@ def check_approved_order_is_executed(mcp: MCPToolClient) -> None:
 
         filled = json.loads(tool_messages(result)[0].content)
         assert filled.get("status") == "filled", filled
+        assert filled["summary"].startswith("已买入 AAPL × 1 股"), filled  # added by the post-tool hook
         assert json.loads(PORTFOLIO_PATH.read_text(encoding="utf-8"))["positions"] == {"AAPL": 1}
         assert result["messages"][-1].content == "已买入 1 股 AAPL。"
     finally:
@@ -233,8 +234,35 @@ def check_history_survives_restart(mcp: MCPToolClient) -> None:
         assert result["messages"][-1].content == "你刚才说关注 AAPL。"
 
 
+def check_post_hook_truncates_and_logs() -> None:
+    """The post-tool hook shortens very long outputs and writes one log line per tool result."""
+    from agent.hooks import MAX_TOOL_OUTPUT_CHARS, make_post_hook
+
+    with tempfile.TemporaryDirectory() as tmp:
+        log = Path(tmp) / "tool_calls.jsonl"
+        long_output = json.dumps({"bars": "x" * (MAX_TOOL_OUTPUT_CHARS * 2)})
+        ai = AIMessage(content="", tool_calls=[
+            {"name": "get_price", "args": {"ticker": "AAPL"}, "id": "p1"},
+            {"name": "get_price", "args": {"ticker": "MSFT"}, "id": "p2"},
+        ])
+        state = {"messages": [
+            _with_id(HumanMessage(content="q")),
+            _with_id(ai),
+            _with_id(ToolMessage(content=long_output, tool_call_id="p1", name="get_price")),
+            _with_id(ToolMessage(content=json.dumps({"ticker": "MSFT"}), tool_call_id="p2", name="get_price")),
+        ]}
+        updates = make_post_hook(log)(state)["messages"]
+        assert len(updates) == 2
+        assert "已截断" in updates[0].content and len(updates[0].content) < MAX_TOOL_OUTPUT_CHARS + 100
+        assert updates[0].id == state["messages"][2].id  # replaces the original message rather than adding one
+        lines = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        assert [entry["tool"] for entry in lines] == ["get_price", "get_price"]
+        assert lines[0]["args"] == {"ticker": "AAPL"}
+
+
 def main() -> None:
     check_summary_cut_keeps_tool_pairs()
+    check_post_hook_truncates_and_logs()
     with MCPToolClient() as mcp:
         check_discovery(mcp)
         check_tool_round_trip(mcp)

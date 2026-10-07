@@ -5,6 +5,8 @@ A failed check returns a simulated HTTP 400 to the reasoner, which can correct i
 Market and account data are read through the MCP client, the same path the agent uses for tools.
 """
 import json
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -14,6 +16,7 @@ from agent.state import AgentState
 
 MAX_CONSECUTIVE_ERRORS = 3  # brief section 5: stop the turn after this many failed checks
 MAX_ORDER_SHARE = 0.20  # one order may not exceed 20% of total account value (brief section 4)
+MAX_TOOL_OUTPUT_CHARS = 4000  # generous for now: current tool outputs are short; lower it if outputs grow
 
 
 def validate_order(args: dict[str, Any], mcp: MCPToolClient) -> tuple[str | None, float | None]:
@@ -86,3 +89,43 @@ def make_pre_hook(mcp: MCPToolClient) -> Callable[[AgentState], dict[str, Any]]:
         return {"messages": messages, "error_count": count, "pending_order": None}
 
     return pre_hook
+
+
+def make_post_hook(log_path: Path) -> Callable[[AgentState], dict[str, Any]]:
+    """Return the post-tool hook node. It runs on the results of the latest tool execution, before the reasoner sees them.
+
+    It does three things: adds a short summary to a filled order, logs every tool call to a JSON Lines file,
+    and truncates very long outputs so they cannot crowd out the context.
+    """
+
+    def post_hook(state: AgentState) -> dict[str, Any]:
+        messages = state["messages"]
+        last_ai = max(i for i, m in enumerate(messages) if isinstance(m, AIMessage))
+        results = [m for m in messages[last_ai + 1:] if isinstance(m, ToolMessage)]
+        calls = {c["id"]: c for c in messages[last_ai].tool_calls}
+
+        processed = []
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as log:
+            for result in results:
+                call = calls.get(result.tool_call_id, {})
+                output = json.loads(result.content)
+                if result.name == "place_order" and output.get("status") == "filled":
+                    output["summary"] = (
+                        f"已{'买入' if output['side'] == 'buy' else '卖出'} {output['ticker']} × {output['quantity']} 股，"
+                        f"成交价 {output['price']}，剩余现金 {output['cash']}"
+                    )
+                content = json.dumps(output, ensure_ascii=False)
+                if len(content) > MAX_TOOL_OUTPUT_CHARS:
+                    content = content[:MAX_TOOL_OUTPUT_CHARS] + f"...[已截断，原长度 {len(content)} 字符]"
+                log.write(json.dumps({
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "tool": result.name,
+                    "args": call.get("args"),
+                    "error": "error" in output or output.get("status") in (400, "rejected"),
+                    "output_chars": len(content),
+                }, ensure_ascii=False) + "\n")
+                processed.append(ToolMessage(content=content, tool_call_id=result.tool_call_id, name=result.name, id=result.id))
+        return {"messages": processed}
+
+    return post_hook

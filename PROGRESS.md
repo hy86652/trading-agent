@@ -7,13 +7,19 @@
 
 ---
 
-## 1. 当前状态（最后更新：2026-10-05）
+## 1. 当前状态（最后更新：2026-10-07）
 
 - **环境搭建**：已完成
 - **阶段 0（数据与账户准备）**：已完成并通过自检，用户已确认
 - **阶段 1（Task 1–3 最小 Agent）**：已完成并通过用户确认（真实 Gemini 测试：AAPL MA5 = 184.68，与 CSV 一致；离线图检查通过）
 - **阶段 2（Task 4，MCP）**：已完成并通过用户确认（真实 Gemini 测试 MA5 = 184.68）
-- **阶段 3（Task 5–6 钩子与 HITL）**：Pre-hook（400 校验、20% 上限、连续 3 次失败停止）与人工审批（approve / reject）已完成，用户测试通过。**Post-tool Hook 内容待确认，尚未实现**
+- **阶段 3（Task 5–6 钩子与 HITL）**：Pre-hook（400 校验、20% 上限、连续 3 次失败停止）与人工审批已完成，用户测试通过。Post-tool Hook 已实现（用户确认三项：成交摘要、截断、日志），离线检查通过；**真实模型下的 Post-hook 效果待用户测试**
+- **阶段 5 评估（Task 9 Eval）**：代码已完成，离线检查通过（`python -m scripts.check_eval`）。`eval/record.py` 用 `eval/cases.json` 中的 10 个用例（含故意出错）录制 trace 到 `eval/traces/`；`eval/judge.py` 用 LLM-judge 打 1–5 分，结果写入 `eval/results.json`。**两者都需要真实模型调用，尚未运行**
+- **README**：`README.md` 已写好（安装、运行、架构、已知风险）
+- **brief 第 12 节与本节**：已于 2026-10-07 同步，阶段 3–6 均未勾选，等待真实测试与确认
+- **阶段 6 部署（Task 9 Deploy）**：`api/main.py` 已完成（`POST /webhook`、`POST /approve`、`GET /health`），离线检查通过（`python -m scripts.check_api`）。`Dockerfile` 与 `.dockerignore` 已写好，**未构建**（本机没有 Docker）。部署到 Render / HF Spaces 尚未做
+- **Langfuse 配置问题**：`.env` 中的密钥有效，但 `LANGFUSE_HOST` 为 `https://cloud.langfuse.com`，服务器返回 401。同一对密钥在 `https://us.cloud.langfuse.com` 上认证通过。需要用户把 `.env` 中的 `LANGFUSE_HOST` 改为美国区地址。离线检查已强制关闭追踪，不会发送 trace
+- **阶段 5（Task 8 观测）**：Langfuse 核心 SDK 的 `@observe` / `start_as_current_observation` 已接入（不装 `langchain` 包）。每个问题一个 trace，LLM 调用为 generation（模型名、token 用量），MCP `tools/call` 为 tool span（JSON-RPC 请求与响应）。**没有密钥时自动禁用**；**需要用户填写密钥后，在 Langfuse 界面中验证结构**。评估脚本见上文阶段 5 评估
 - **阶段 4（Task 7 压缩与检查点）**：代码已完成，离线检查通过（压缩切分不拆分工具调用对、长对话实际压缩、重启后同一 thread 恢复）；`cli.py` 启动与恢复路径已验证；**真实模型的多轮与重启测试待做**
 - **账户状态**：`data/portfolio.json` 当前为现金 99819.36、AAPL 1 股（阶段 3 批准测试的结果，已由用户确认保留）
 
@@ -80,6 +86,11 @@
 | 2026-10-05 | 阶段 2：Server 注册全部 4 个工具，Agent 只绑定 3 个只读工具（`READ_ONLY_TOOL_NAMES`），`tool_exec` 同样拒绝未绑定的工具 | 保留 place_order 的安全约束；阶段 3 在 Agent 端放开并加 pre-hook 与审批（用户确认） |
 | 2026-10-05 | MCP Client 在后台线程的事件循环中持有会话，对外提供同步的 `call()` | LangGraph 节点为同步函数，MCP SDK 为异步；SDK 的 stdio 传输要求进出 task group 在同一个 task 中完成 |
 | 2026-10-06 | 阶段 4：超过 10 条消息时压缩最旧的 8 条，切分点后移以免拆散工具调用与结果；压缩在每个问题开始、工具执行后、拒绝订单后检查 | brief 第 6 节；孤立的 tool 结果会导致模型 API 报错 |
+| 2026-10-07 | 阶段 6 审批方案：`/webhook` 遇到订单返回 `pending_approval`，`/approve` 完成审批（brief 第 10 节的第一个选项）；同一线程有待审批订单时 `/webhook` 返回 409 | 线上没有终端审批；用户未明确选择，按推荐方案实现，可改 |
+| 2026-10-07 | 没有 Langfuse 密钥时，或在离线检查中，关闭追踪（`LANGFUSE_TRACING_ENABLED=false`） | 密钥为空时 SDK 持续上报 401；离线检查不应发送 trace |
+| 2026-10-07 | Post-tool Hook 三项：成交摘要（place_order filled）、超过 4000 字符截断、每次工具调用写入 `data/logs/tool_calls.jsonl`（已 gitignore） | 用户确认；截断阈值先设大，因为当前输出很短 |
+| 2026-10-07 | Langfuse 采用核心 SDK（`observe`、`start_as_current_observation`），不装 `langchain` 包 | 用户选择方案 B；brief 禁止未提及的重量级依赖 |
+| 2026-10-07 | `cli.py` 在单个问题失败时打印简短错误并保持会话；配额错误不再退出程序 | 配额错误曾导致退出，问题被当成 shell 命令 |
 | 2026-10-06 | 阶段 4：一个会话 = 一个 thread，历史跨问题保留；`cli.py --thread <id>` 恢复会话；每个问题重置 pending_order、approval、error_count | 满足"同一 thread id 从上次状态继续"；error_count 不重置会导致恢复后误触发停止 |
 | 2026-10-05 | Server 的 `place_order` 在 Server 端仍可调用，但 Agent 不绑定；Server 的 stdout 只用于协议，不打印 | stdio 传输占用 stdout；安全由 Agent 端控制 |
 | 2026-10-05 | 模型名从 `gemini-2.5-flash` 改为 `gemini-3.8-flash` | 2.5-flash 对新用户返回 404，错误信息建议 3.8-flash；3.8-flash 测试通过 |

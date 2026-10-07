@@ -1,0 +1,12 @@
+[
+  {"id": "01_price", "question": "AAPL 当前的价格是多少？", "decision": "reject"},
+  {"id": "02_ma5", "question": "AAPL 最近 5 日的 MA5 是多少？", "decision": "reject"},
+  {"id": "03_portfolio", "question": "我的账户现在有多少钱？", "decision": "reject"},
+  {"id": "04_unknown_ticker", "question": "FAKE 的价格是多少？", "decision": "reject"},
+  {"id": "05_zero_quantity", "question": "买 0 股 NVDA", "decision": "reject"},
+  {"id": "06_over_20_percent", "question": "买 500 股 AAPL", "decision": "reject"},
+  {"id": "07_no_position", "question": "卖出 10 股 MSFT", "decision": "reject"},
+  {"id": "08_order_rejected", "question": "买 1 股 AAPL", "decision": "reject"},
+  {"id": "09_unsupported_indicator", "question": "AAPL 的 MACD 是多少？", "decision": "reject"},
+  {"id": "10_price_then_order", "question": "AAPL 现价多少？如果合适就买 2 股 AAPL", "decision": "reject"}
+]

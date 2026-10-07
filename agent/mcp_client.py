@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from langchain_core.tools import StructuredTool
+from langfuse import get_client
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -96,10 +97,16 @@ class MCPToolClient:
 
     def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Send tools/call and return the tool's dict result. Server-side errors come back as {"error": ...}."""
-        result = self._run(self._session.call_tool(name, arguments))
-        text = "".join(block.text for block in result.content if hasattr(block, "text"))
-        if result.isError:
-            return {"error": text}
+        request = {"method": "tools/call", "params": {"name": name, "arguments": arguments}}
+        with get_client().start_as_current_observation(name=f"mcp tools/call {name}", as_type="tool", input=request) as span:
+            result = self._run(self._session.call_tool(name, arguments))
+            text = "".join(block.text for block in result.content if hasattr(block, "text"))
+            output = {"error": text} if result.isError else self._parse(text)
+            span.update(output={"result": output, "isError": bool(result.isError)})
+        return output
+
+    @staticmethod
+    def _parse(text: str) -> dict[str, Any]:
         try:
             return json.loads(text)
         except json.JSONDecodeError:

@@ -11,12 +11,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
+from langfuse import get_client
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 from agent.graph import build_graph
 from agent.mcp_client import MCPToolClient
 from agent.nodes import to_text
+from agent.observability import disable_tracing_without_keys
 
 ROOT = Path(__file__).resolve().parent
 # Gitignored (*.db). Conversation state is kept here, so a restarted session can resume.
@@ -62,9 +64,11 @@ def main() -> None:
     args = parser.parse_args()
 
     load_dotenv(ROOT / ".env")
+    disable_tracing_without_keys()
     CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
     thread_id = args.thread or str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
+    langfuse = get_client()
     # The MCP server runs as a subprocess for the whole session and is shut down on exit.
     with MCPToolClient() as mcp, closing(sqlite3.connect(CHECKPOINT_PATH, check_same_thread=False)) as conn:
         graph = build_graph(build_llm(), mcp, SqliteSaver(conn))
@@ -76,13 +80,27 @@ def main() -> None:
                 break
             if not question:
                 continue
-            result = graph.invoke(question_input(question, resuming), config)
-            resuming = True
-            # The graph pauses at human_approval; resume it with the person's decision.
-            while "__interrupt__" in result:
-                decision = ask_approval(result["__interrupt__"][0].value)
-                result = graph.invoke(Command(resume=decision), config)
-            print(to_text(result["messages"][-1].content))
+            try:
+                # One Langfuse trace per question. Without keys this is a no-op.
+                with langfuse.start_as_current_observation(
+                    name="question", as_type="span", input=question, metadata={"thread_id": thread_id}
+                ) as trace:
+                    result = graph.invoke(question_input(question, resuming), config)
+                    resuming = True
+                    # The graph pauses at human_approval; resume it with the person's decision.
+                    while "__interrupt__" in result:
+                        decision = ask_approval(result["__interrupt__"][0].value)
+                        result = graph.invoke(Command(resume=decision), config)
+                    answer = to_text(result["messages"][-1].content)
+                    trace.update(output=answer)
+            except Exception as exc:
+                # A failed model call (quota, network) should not end the session. The thread is checkpointed,
+                # so the conversation can continue once the problem clears.
+                print(f"\n[出错] 本次请求未完成：{type(exc).__name__}: {str(exc)[:200]}")
+                print("会话仍然保留，可以稍后继续提问（配额错误通常需要等到次日重置）。")
+                continue
+            print(answer)
+        langfuse.flush()
 
 
 if __name__ == "__main__":

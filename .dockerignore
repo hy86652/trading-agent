@@ -1,0 +1,8 @@
+.venv/
+.env
+.git/
+__pycache__/
+*.db
+data/logs/
+eval/traces/
+eval/results.json
