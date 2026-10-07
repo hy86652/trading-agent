@@ -38,6 +38,7 @@ def order(quantity: int) -> AIMessage:
 def main() -> None:
     # The app loads .env on startup, which may hold real Langfuse keys. Offline checks must not send traces.
     os.environ["LANGFUSE_TRACING_ENABLED"] = "false"
+    os.environ["API_TOKEN"] = "test-token"
     replies = [
         AIMessage(content="The AAPL price has been checked."),          # /webhook: text answer
         order(1),                                                      # /webhook: order waits for approval
@@ -50,8 +51,16 @@ def main() -> None:
         app = create_app(llm_factory=lambda: ScriptedLLM(replies), checkpoint_path=Path(tmp) / "checkpoints.db")
         try:
             PORTFOLIO_PATH.write_text(json.dumps({"cash": 100000.0, "positions": {}}), encoding="utf-8")
+            # Without the token, the endpoints refuse; /health stays open for the platform's health check.
+            anonymous = TestClient(app)  # not used as a context manager, so no lifespan is needed to reach the auth check
+            assert anonymous.post("/webhook", json={"question": "hi"}).status_code == 401
+            assert anonymous.post("/approve", json={"thread_id": "t", "decision": "approve"}).status_code == 401
+            wrong = TestClient(app, headers={"X-API-Key": "wrong"})
+            assert wrong.post("/webhook", json={"question": "hi"}).status_code == 401
+
             with TestClient(app) as client:
                 assert client.get("/health").json() == {"status": "ok"}
+                client.headers.update({"X-API-Key": "test-token"})
 
                 first = client.post("/webhook", json={"question": "What is the AAPL price?"}).json()
                 assert first["status"] == "completed" and first["answer"] == "The AAPL price has been checked.", first

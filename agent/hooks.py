@@ -12,6 +12,7 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage, ToolMessage
 
 from agent.mcp_client import MCPToolClient
+from agent.observability import tracer
 from agent.state import AgentState
 
 MAX_CONSECUTIVE_ERRORS = 3  # brief section 5: stop the turn after this many failed checks
@@ -83,6 +84,10 @@ def make_pre_hook(mcp: MCPToolClient) -> Callable[[AgentState], dict[str, Any]]:
             messages.append(
                 ToolMessage(content=json.dumps(payload, ensure_ascii=False), tool_call_id=call["id"], name=call["name"])
             )
+        with tracer().start_as_current_observation(
+            name="pre_hook_check", as_type="span", input={"calls": [c["name"] for c in calls]}
+        ) as span:
+            span.update(output={"status": 400, "error": error})
         count = state["error_count"] + 1
         if count >= MAX_CONSECUTIVE_ERRORS:
             messages.append(AIMessage(content="The order failed validation 3 times in a row, so this request was stopped. Please check the order details and try again."))

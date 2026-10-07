@@ -99,6 +99,7 @@ These checks start the real MCP server, and the one that places an order restore
 
 ```powershell
 # Ask a question; an order returns pending_approval
+# (add -H "X-API-Key: $API_TOKEN" when the API_TOKEN environment variable is set)
 curl -X POST localhost:8000/webhook -H "Content-Type: application/json" -d '{"question": "Buy 1 share of AAPL"}'
 # Approve or reject (use the thread_id from the previous response)
 curl -X POST localhost:8000/approve -H "Content-Type: application/json" -d '{"thread_id": "<ID>", "decision": "reject"}'
@@ -115,8 +116,17 @@ curl -X POST localhost:8000/approve -H "Content-Type: application/json" -d '{"th
 
 ```bash
 docker build -t trading-agent .
-docker run -p 7860:7860 -e GOOGLE_API_KEY=... trading-agent
+docker run -p 7860:7860 -e GOOGLE_API_KEY=... -e API_TOKEN=... trading-agent
 ```
+
+**Deployment** (Render, free plan; not yet deployed). `render.yaml` is a Render Blueprint:
+
+1. In Render, create a Blueprint from this GitHub repository.
+2. Fill in the secrets that the Blueprint marks as manual: `GOOGLE_API_KEY`, and optionally `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`.
+3. Copy the generated `API_TOKEN` from the service's environment settings. Every request must send it in the `X-API-Key` header.
+4. Check the service with `GET /health`, which needs no token.
+
+On the free plan the disk is temporary: sessions and pending approvals are lost when the service restarts or redeploys.
 
 ## Safety boundaries
 
@@ -127,7 +137,7 @@ docker run -p 7860:7860 -e GOOGLE_API_KEY=... trading-agent
 
 ## Known risks
 
-1. **Approval online**: terminal approval only works locally. Online, approval is two requests: `/webhook` and then `/approve`. Anyone who has a `thread_id` can approve that thread. The API has no authentication yet, so do not expose order placement to the public internet without adding it.
+1. **Approval online**: terminal approval only works locally. Online, approval is two requests: `/webhook` and then `/approve`. Access is controlled by a shared token (`API_TOKEN`, sent as `X-API-Key`). It is a single shared secret, not per-user authentication: anyone with the token can approve any thread. Leave `API_TOKEN` unset only for local use.
 2. **Checkpoint persistence**: checkpoints are stored in a SQLite file. On platforms such as Render or HF Spaces, the disk may be lost when the container restarts, and sessions go with it.
 3. **Model hallucination**: the model may make up prices or indicators. The system prompt requires values from tools, and the evaluation watches for this, but it cannot be fully prevented.
 4. **Free-tier limits**: the Gemini free tier allows 20 requests per day. Recording and evaluation will use that up quickly. Once it is exhausted, requests fail until the next day.

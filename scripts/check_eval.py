@@ -123,6 +123,63 @@ def check_faithfulness() -> None:
     assert numbers_in("MA5 and RSI14 over 20 days") == [20.0], numbers_in("MA5 and RSI14 over 20 days")
 
 
+def check_langfuse_source() -> None:
+    """A Langfuse trace is rebuilt into the same transcript shape the local recorder produces."""
+    from types import SimpleNamespace
+
+    from eval.faithfulness import check_faithfulness
+    from eval.langfuse_source import (
+        PRE_HOOK_SPAN, QUESTION_SPAN, REASONER_SPAN, TOOL_PREFIX, example_detail, fetch_question_traces,
+        trace_from_langfuse,
+    )
+
+    # Rejected order: the human decision becomes a rejected tool result, and the final answer is not duplicated.
+    trace = trace_from_langfuse(example_detail())
+    assert [row["role"] for row in trace["transcript"]] == ["human", "ai", "tool", "ai"], trace["transcript"]
+    assert trace["transcript"][1]["tool_calls"][0]["name"] == "place_order"
+    assert trace["transcript"][2]["tool"] == "place_order" and "rejected" in trace["transcript"][2]["content"]
+    assert trace["transcript"][-1]["content"] == "Order cancelled."
+    assert check_faithfulness(trace)["passed"] is True
+
+    # Pre-hook rejection and a read-only tool call, in order.
+    detail = SimpleNamespace(id="x", input=None, output=None, observations=[
+        SimpleNamespace(name=QUESTION_SPAN, start_time=0, input="What is AAPL?", output="It is 180.64."),
+        SimpleNamespace(name=REASONER_SPAN, start_time=1, input=None, output={"content": "", "tool_calls": [
+            {"name": "place_order", "args": {"ticker": "AAPL", "side": "buy", "quantity": 0}}]}),
+        SimpleNamespace(name=PRE_HOOK_SPAN, start_time=2, input={"calls": ["place_order"]},
+                        output={"status": 400, "error": "quantity must be a positive integer"}),
+        SimpleNamespace(name=f"{TOOL_PREFIX}get_price", start_time=3,
+                        input={"method": "tools/call", "params": {"name": "get_price", "arguments": {}}},
+                        output={"result": {"ticker": "AAPL"}, "isError": False}),
+        SimpleNamespace(name=REASONER_SPAN, start_time=4, input=None, output={"content": "It is 180.64.", "tool_calls": []}),
+    ])
+    trace = trace_from_langfuse(detail)
+    roles = [(row["role"], row.get("tool")) for row in trace["transcript"]]
+    assert roles == [("human", None), ("ai", None), ("tool", "place_order"), ("tool", "get_price"), ("ai", None)], roles
+    assert "positive integer" in trace["transcript"][2]["content"]
+
+    # The v2 endpoint returns input and output as raw strings. JSON is parsed; a plain numeric answer is kept as text.
+    raw = SimpleNamespace(id="raw", observations=[
+        SimpleNamespace(name=QUESTION_SPAN, start_time=0, input="What is the MA5?", output="184.68"),
+        SimpleNamespace(name=REASONER_SPAN, start_time=1, input=None,
+                        output='{"content": "", "tool_calls": [{"name": "get_price", "args": {"ticker": "AAPL"}}]}'),
+        SimpleNamespace(name=f"{TOOL_PREFIX}get_price", start_time=2,
+                        input='{"method": "tools/call", "params": {"name": "get_price", "arguments": {"ticker": "AAPL"}}}',
+                        output='{"result": {"ticker": "AAPL", "bars": []}, "isError": false}'),
+    ])
+    trace = trace_from_langfuse(raw)
+    assert trace["transcript"][2] == {"role": "tool", "tool": "get_price", "content": '{"ticker": "AAPL", "bars": []}'}, trace["transcript"][2]
+    assert trace["transcript"][-1] == {"role": "ai", "content": "184.68"}, trace["transcript"][-1]
+
+    # Without keys the source refuses to run, rather than returning nothing.
+    try:
+        fetch_question_traces(1)
+    except RuntimeError as exc:
+        assert "not configured" in str(exc)
+    else:
+        raise AssertionError("fetching must fail without Langfuse keys")
+
+
 def check_transcript_is_json_serialisable() -> None:
     from langchain_core.messages import HumanMessage
 
@@ -138,6 +195,7 @@ def main() -> None:
     check_transcript_is_json_serialisable()
     check_record_retries_failed_case()
     check_faithfulness()
+    check_langfuse_source()
     with MCPToolClient() as mcp:
         check_record_case(mcp)
     print("eval checks passed")

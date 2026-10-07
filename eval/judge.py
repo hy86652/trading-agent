@@ -95,11 +95,28 @@ def judge_trace(trace: dict[str, Any], llm: Any, attempts: int = 3, pause_second
 
 
 def main() -> None:
+    import argparse
+
+    from dotenv import load_dotenv
+
+    from agent.runtime import ROOT as PROJECT_ROOT
     from agent.runtime import build_llm  # imported here so the judge module itself needs no API key
 
-    traces = load_traces()
+    parser = argparse.ArgumentParser(description="Score recorded conversations with an LLM judge")
+    parser.add_argument("--source", choices=["local", "langfuse"], default="local",
+                        help="local: eval/traces/*.json; langfuse: the most recent question traces in Langfuse")
+    parser.add_argument("--limit", type=int, default=10, help="number of Langfuse traces to read (langfuse source)")
+    args = parser.parse_args()
+
+    load_dotenv(PROJECT_ROOT / ".env")  # Langfuse keys are needed for the langfuse source
+    if args.source == "langfuse":
+        from eval.langfuse_source import fetch_question_traces
+
+        traces = fetch_question_traces(args.limit)
+    else:
+        traces = load_traces()
     if not traces:
-        sys.exit(f"no traces in {TRACE_DIR}; run `python -m eval.record` first")
+        sys.exit(f"no traces found (source: {args.source}); run `python -m eval.record` first, or check Langfuse")
     llm = build_llm()
     results = []
     for trace in traces:

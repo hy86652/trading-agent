@@ -54,9 +54,11 @@ def to_text(content: str | list) -> str:
 def record_llm_call(generation: Any, response: Any, model_name: str | None) -> None:
     """Attach the model name, output and token counts to a Langfuse generation span (a no-op without keys)."""
     usage = getattr(response, "usage_metadata", None) or {}
+    # Structured output so the trace can be turned back into a transcript (eval/langfuse_source.py).
+    tool_calls = [{"name": c["name"], "args": c["args"]} for c in getattr(response, "tool_calls", None) or []]
     generation.update(
         model=model_name,
-        output=to_text(response.content) or str(getattr(response, "tool_calls", "")),
+        output={"content": to_text(response.content), "tool_calls": tool_calls},
         usage_details={"input": usage.get("input_tokens", 0), "output": usage.get("output_tokens", 0)} if usage else None,
     )
 
@@ -126,6 +128,9 @@ def human_approval(state: AgentState) -> dict[str, Any]:
     """
     order = state["pending_order"]
     decision = interrupt({"order": order["args"], "amount": order["amount"]})
+    # Recorded after the pause, so an interrupted run does not produce a span.
+    with tracer().start_as_current_observation(name="human_decision", as_type="span", input=order["args"]) as span:
+        span.update(output={"decision": "approve" if str(decision).strip().lower() == "approve" else "reject"})
     if str(decision).strip().lower() == "approve":
         return {"approval": "approve", "pending_order": None}
     # Answer the pending tool call so the message history stays valid for the reasoner.

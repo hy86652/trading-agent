@@ -1,0 +1,19 @@
+# Render Blueprint: deploys the Dockerfile as a web service on the free plan.
+# Not deployed yet. Secrets marked "sync: false" are entered by hand in the Render dashboard; they are never stored here.
+services:
+  - type: web
+    name: trading-agent
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: API_TOKEN          # clients must send this value in the X-API-Key header
+        generateValue: true
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_HOST
+        value: https://us.cloud.langfuse.com

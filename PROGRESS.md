@@ -64,6 +64,7 @@
 | `api/main.py` | FastAPI app: `/webhook`, `/approve`, `/health` | Done, offline check passes |
 | `eval/record.py`, `eval/judge.py`, `eval/cases.json` | Trace recording and LLM-judge scoring | Done, not run against the real model |
 | `eval/faithfulness.py` | Deterministic check: every number in the final answer must appear in the question or a tool result | Done, offline check passes |
+| `eval/langfuse_source.py` | Reads question traces from Langfuse (v2 observations API) and rebuilds the transcript for the judge. `python -m eval.judge --source langfuse` | Done. Offline check passes; live call works (0 traces yet on the US account) |
 | `scripts/check_graph.py` | Offline checks of the graph with a scripted LLM (starts the real MCP server, no key needed). Run: `python -m scripts.check_graph` | Done, passes |
 | `scripts/check_eval.py` | Offline checks of judge parsing, retries and recording. Run: `python -m scripts.check_eval` | Done, passes |
 | `scripts/check_api.py` | Offline checks of the API with TestClient. Run: `python -m scripts.check_api` | Done, passes |
@@ -108,6 +109,10 @@
 | 2026-10-07 | Logging: the MCP client logs `tools/list` and `tools/call` at INFO; the MCP server shows only warnings. Set `LOG_LEVEL=INFO` to see the details | Replaces the ad-hoc `print` calls; quiet by default |
 | 2026-10-07 | Without Langfuse keys, no client is created (no-op tracer). Creating a client without keys printed an authentication warning on every call | Keeps the terminal and the checks free of warnings |
 | 2026-10-07 | `eval/record.py` retries a failed case up to 3 times with a 20 s pause; a case that still fails is reported and skipped | Free-tier quota and network errors are expected during recording |
+| 2026-10-07 | Deployment platform: Render (free plan), chosen by the assistant at the user's request. Reason: the repository is already on GitHub, Render builds the existing Dockerfile directly, and the `render.yaml` Blueprint keeps the configuration in the repository. HF Spaces was the alternative | Simplest path; both platforms lose the local disk on the free plan, so the checkpoint limitation applies either way |
+| 2026-10-07 | API access control: optional shared token `API_TOKEN`, sent in the `X-API-Key` header, required on `/webhook` and `/approve`. `/health` stays open. Unset means open (local use) | A public endpoint would let anyone spend the Gemini quota and approve orders |
+| 2026-10-07 | The judge can read traces from Langfuse (`--source langfuse`) as well as from `eval/traces/`. Langfuse traces are read through the v2 observations endpoint, because the legacy `/api/public/traces` returns 410 for organizations created after 2026-09-16. Input and output come back as raw strings and are parsed | The legacy endpoint is unavailable to this account; the v2 endpoint was tested live |
+| 2026-10-07 | Pre-hook rejections, human decisions and LLM tool-call decisions are recorded as spans, so a trace contains the whole dialogue, not only the MCP calls. The LLM generation output is structured (`content` and `tool_calls`) | Without these spans, a Langfuse trace would miss the errors the judge needs to score |
 | 2026-10-07 | Added a deterministic faithfulness check (`eval/faithfulness.py`). Numbers in the final answer must appear in the question or a tool result (tolerance 0.005). It is recorded next to the LLM-judge score, not folded into it | An LLM judge can miss invented numbers; a rule cannot. Labels such as MA5 and dates are handled so they do not cause false alarms |
 | 2026-10-07 | All project text converted to English: code comments and docstrings, user-facing messages, prompts, README, this log, and the test cases | The user asked for it. The agent's replies follow the language of the user's question, so Chinese questions still get Chinese answers |
 
@@ -124,9 +129,10 @@
 - [ ] **Docker**: install before stage 6 deployment. The image has not been built
 - [ ] **`PROJECT.md` vs `project_brief.md`**: brief section 8 says `PROJECT.md`, but the file is `project_brief.md`. The latter is used
 - [ ] **Project location**: the brief and the project are in two directories. Whether to unify them is up to the user
-- [ ] **Langfuse host**: change `LANGFUSE_HOST` in `.env` to `https://us.cloud.langfuse.com` (the keys are valid there)
-- [ ] **Hosting decisions for stage 6**: choose Render or HF Spaces, and whether to accept the risk that checkpoints are lost on restart (or pay for persistent storage)
-- [ ] **Online approval access control**: `/approve` has no authentication yet
+- [ ] **Langfuse host**: change `LANGFUSE_HOST` in `.env` to `https://us.cloud.langfuse.com` (the keys are valid there). Until this is changed, real traces are rejected with 401 and `--source langfuse` will find nothing
+- [x] **Hosting decisions for stage 6**: Render (free plan) chosen. The checkpoint risk is accepted for now and documented in the README. Upgrading to persistent storage is a later option
+- [x] **Online access control**: `API_TOKEN` shared secret implemented (`X-API-Key`). Must be set before any public deployment
+- [ ] **Deploy to Render**: needs the user's Render account, the GitHub connection, and the secrets entered in the dashboard. Not done yet
 
 ---
 

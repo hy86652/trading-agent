@@ -7,8 +7,14 @@ GET  /health    liveness check.
 Terminal approval does not work on a hosted server, so approval is a second request (brief section 10).
 Requests are handled one at a time: the agent graph is not built for concurrent runs on one checkpoint store.
 
+If the API_TOKEN environment variable is set, /webhook and /approve require the header X-API-Key with the same
+value. Without it the endpoints are open, which is fine locally but must not be done on a public server:
+every /webhook call uses the Gemini quota.
+
 Run locally from the project root with: uvicorn api.main:app --port 8000
 """
+import os
+import secrets
 import sqlite3
 import threading
 import uuid
@@ -17,7 +23,8 @@ from pathlib import Path
 from typing import Any, Callable, Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.security import APIKeyHeader
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 from pydantic import BaseModel, Field
@@ -27,6 +34,18 @@ from agent.mcp_client import MCPToolClient
 from agent.nodes import to_text
 from agent.observability import disable_tracing_without_keys
 from agent.runtime import CHECKPOINT_PATH, ROOT, build_llm, configure_logging, question_input
+
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def require_api_key(key: str | None = Depends(api_key_header)) -> None:
+    """Check the X-API-Key header against API_TOKEN. With no API_TOKEN set, requests are allowed (local use)."""
+    expected = os.getenv("API_TOKEN")
+    if not expected:
+        return
+    if key is None or not secrets.compare_digest(key, expected):
+        raise HTTPException(401, "missing or invalid X-API-Key header")
 
 
 class QuestionIn(BaseModel):
@@ -97,7 +116,7 @@ def create_app(llm_factory: Callable[[], Any] = build_llm, checkpoint_path: Path
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.post("/webhook")
+    @app.post("/webhook", dependencies=[Depends(require_api_key)])
     def webhook(body: QuestionIn, request: Request) -> dict[str, Any]:
         try:
             return request.app.state.service.ask(body.question, body.thread_id)
@@ -106,7 +125,7 @@ def create_app(llm_factory: Callable[[], Any] = build_llm, checkpoint_path: Path
         except Exception as exc:
             raise HTTPException(503, f"agent call failed: {type(exc).__name__}") from exc
 
-    @app.post("/approve")
+    @app.post("/approve", dependencies=[Depends(require_api_key)])
     def approve(body: DecisionIn, request: Request) -> dict[str, Any]:
         try:
             return request.app.state.service.approve(body.thread_id, body.decision)
