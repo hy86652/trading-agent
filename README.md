@@ -142,6 +142,7 @@ On the free plan the disk is temporary: sessions and pending approvals are lost 
 3. **Model hallucination**: the model may make up prices or indicators. The system prompt requires values from tools, and the evaluation watches for this, but it cannot be fully prevented.
 4. **Free-tier limits**: the Gemini free tier allows 20 requests per day. Recording and evaluation will use that up quickly. Once it is exhausted, requests fail until the next day.
 5. **Trace data**: with Langfuse enabled, questions and tool results are sent to Langfuse. Do not type real personal or account information into questions.
+6. **Trace query delay**: a trace sent to Langfuse is not immediately queryable through the API; it took roughly one to two minutes to appear in testing. `eval/judge.py --source langfuse` run right after `cli.py` may find nothing yet. Wait and try again before assuming the trace was lost.
 
 ## Progress
 

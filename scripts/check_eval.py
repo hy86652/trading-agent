@@ -122,6 +122,18 @@ def check_faithfulness() -> None:
 
     assert numbers_in("MA5 and RSI14 over 20 days") == [20.0], numbers_in("MA5 and RSI14 over 20 days")
 
+    # The tool gives an ISO date; the model reformats it in prose. The day/month/year must still be grounded.
+    reformatted = check({
+        "id": "f2",
+        "question": "What is the AAPL price?",
+        "transcript": [
+            {"role": "human", "content": "What is the AAPL price?"},
+            {"role": "tool", "tool": "get_price", "content": '{"bars": [{"date": "2026-05-21", "close": 180.64}]}'},
+            {"role": "ai", "content": "As of May 21, 2026, AAPL closed at $180.64."},
+        ],
+    })
+    assert reformatted == {"checked": 3, "ungrounded": [], "passed": True}, reformatted
+
 
 def check_langfuse_source() -> None:
     """A Langfuse trace is rebuilt into the same transcript shape the local recorder produces."""

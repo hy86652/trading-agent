@@ -10,11 +10,18 @@ from typing import Any
 # Digits not preceded by a letter, underscore, digit, dot or hyphen. This keeps labels such as "MA5" and
 # "RSI14" out, and keeps the parts of dates such as "2026-01-02" from being read as separate numbers.
 NUMBER = re.compile(r"(?<![A-Za-z_\d.\-])\d+(?:\.\d+)?")
+# Every run of digits, with no exclusions. Used only to build the set of "known" numbers from the question
+# and tool results: a source date "2026-01-02" must also ground an answer that reformats it as "January 2, 2026".
+ANY_NUMBER = re.compile(r"\d+(?:\.\d+)?")
 TOLERANCE = 0.005  # tool values are rounded to 2 decimals; answers may round further
 
 
 def numbers_in(text: str) -> list[float]:
     return [float(match) for match in NUMBER.findall(text)]
+
+
+def _known_numbers_in(text: str) -> list[float]:
+    return [float(match) for match in ANY_NUMBER.findall(text)]
 
 
 def final_answer(transcript: list[dict[str, Any]]) -> str:
@@ -28,7 +35,7 @@ def final_answer(transcript: list[dict[str, Any]]) -> str:
 def check_faithfulness(trace: dict[str, Any]) -> dict[str, Any]:
     """Compare the numbers in the final answer with the numbers the conversation actually contained."""
     sources = [trace["question"]] + [row["content"] for row in trace["transcript"] if row["role"] in ("human", "tool")]
-    known = [n for text in sources for n in numbers_in(text)]
+    known = [n for text in sources for n in _known_numbers_in(text)]
     answer_numbers = numbers_in(final_answer(trace["transcript"]))
     ungrounded = sorted({n for n in answer_numbers if not any(abs(n - k) <= TOLERANCE for k in known)})
     return {
