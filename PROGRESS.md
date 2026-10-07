@@ -63,6 +63,7 @@
 | `cli.py` | Terminal entry point. Keeps the MCP server running for the session. `build_llm()` is the only place to change the model | Done. Real test pending |
 | `api/main.py` | FastAPI app: `/webhook`, `/approve`, `/health` | Done, offline check passes |
 | `eval/record.py`, `eval/judge.py`, `eval/cases.json` | Trace recording and LLM-judge scoring | Done, not run against the real model |
+| `eval/faithfulness.py` | Deterministic check: every number in the final answer must appear in the question or a tool result | Done, offline check passes |
 | `scripts/check_graph.py` | Offline checks of the graph with a scripted LLM (starts the real MCP server, no key needed). Run: `python -m scripts.check_graph` | Done, passes |
 | `scripts/check_eval.py` | Offline checks of judge parsing, retries and recording. Run: `python -m scripts.check_eval` | Done, passes |
 | `scripts/check_api.py` | Offline checks of the API with TestClient. Run: `python -m scripts.check_api` | Done, passes |
@@ -107,6 +108,7 @@
 | 2026-10-07 | Logging: the MCP client logs `tools/list` and `tools/call` at INFO; the MCP server shows only warnings. Set `LOG_LEVEL=INFO` to see the details | Replaces the ad-hoc `print` calls; quiet by default |
 | 2026-10-07 | Without Langfuse keys, no client is created (no-op tracer). Creating a client without keys printed an authentication warning on every call | Keeps the terminal and the checks free of warnings |
 | 2026-10-07 | `eval/record.py` retries a failed case up to 3 times with a 20 s pause; a case that still fails is reported and skipped | Free-tier quota and network errors are expected during recording |
+| 2026-10-07 | Added a deterministic faithfulness check (`eval/faithfulness.py`). Numbers in the final answer must appear in the question or a tool result (tolerance 0.005). It is recorded next to the LLM-judge score, not folded into it | An LLM judge can miss invented numbers; a rule cannot. Labels such as MA5 and dates are handled so they do not cause false alarms |
 | 2026-10-07 | All project text converted to English: code comments and docstrings, user-facing messages, prompts, README, this log, and the test cases | The user asked for it. The agent's replies follow the language of the user's question, so Chinese questions still get Chinese answers |
 
 ---

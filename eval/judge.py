@@ -15,6 +15,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent.nodes import to_text
+from eval.faithfulness import check_faithfulness
 
 ROOT = Path(__file__).resolve().parent.parent
 TRACE_DIR = ROOT / "eval" / "traces"
@@ -103,11 +104,17 @@ def main() -> None:
     results = []
     for trace in traces:
         judgement = judge_trace(trace, llm)
-        results.append({"id": trace["id"], "question": trace["question"], **judgement})
-        print(f"{trace['id']:<24} {judgement['score']}  {judgement['reason']}")
+        faithfulness = check_faithfulness(trace)  # deterministic; does not use the model
+        results.append({"id": trace["id"], "question": trace["question"], **judgement, "faithfulness": faithfulness})
+        flag = "" if faithfulness["passed"] else f"  UNGROUNDED numbers: {faithfulness['ungrounded']}"
+        print(f"{trace['id']:<24} {judgement['score']}  {judgement['reason']}{flag}")
     average = sum(r["score"] for r in results) / len(results)
-    RESULTS_PATH.write_text(json.dumps({"average": average, "results": results}, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n{len(results)} traces, average {average:.2f}. Saved to {RESULTS_PATH}")
+    unfaithful = [r["id"] for r in results if not r["faithfulness"]["passed"]]
+    RESULTS_PATH.write_text(
+        json.dumps({"average": average, "unfaithful": unfaithful, "results": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(f"\n{len(results)} traces, average {average:.2f}, {len(unfaithful)} with ungrounded numbers. Saved to {RESULTS_PATH}")
 
 
 if __name__ == "__main__":

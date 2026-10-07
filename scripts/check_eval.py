@@ -97,6 +97,32 @@ def check_record_retries_failed_case() -> None:
     assert trace["transcript"][-1]["content"] == "answer"
 
 
+def _trace_with_answer(answer: str) -> dict:
+    return {
+        "id": "f",
+        "question": "What is the MA5 of AAPL?",
+        "transcript": [
+            {"role": "human", "content": "What is the MA5 of AAPL?"},
+            {"role": "ai", "content": "", "tool_calls": [{"name": "get_indicators", "args": {}}]},
+            {"role": "tool", "tool": "get_indicators", "content": '{"ticker": "AAPL", "date": "2026-01-02", "values": {"MA5": 184.68}}'},
+            {"role": "ai", "content": answer},
+        ],
+    }
+
+
+def check_faithfulness() -> None:
+    """Numbers in the answer must appear in the question or tool results; labels such as MA5 are ignored."""
+    from eval.faithfulness import check_faithfulness as check, numbers_in
+
+    grounded = check(_trace_with_answer("The MA5 of AAPL is 184.68 as of 2026-01-02."))
+    assert grounded == {"checked": 2, "ungrounded": [], "passed": True}, grounded  # 184.68 and the year 2026
+
+    invented = check(_trace_with_answer("The MA5 of AAPL is 190.00."))
+    assert invented["passed"] is False and invented["ungrounded"] == [190.0], invented
+
+    assert numbers_in("MA5 and RSI14 over 20 days") == [20.0], numbers_in("MA5 and RSI14 over 20 days")
+
+
 def check_transcript_is_json_serialisable() -> None:
     from langchain_core.messages import HumanMessage
 
@@ -111,6 +137,7 @@ def main() -> None:
     check_judge_gives_up_after_attempts()
     check_transcript_is_json_serialisable()
     check_record_retries_failed_case()
+    check_faithfulness()
     with MCPToolClient() as mcp:
         check_record_case(mcp)
     print("eval checks passed")
