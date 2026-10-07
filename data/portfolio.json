@@ -1,4 +1,6 @@
 {
-  "cash": 100000.0,
-  "positions": {}
+  "cash": 99819.36,
+  "positions": {
+    "AAPL": 1
+  }
 }

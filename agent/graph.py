@@ -1,21 +1,27 @@
-"""Graph structure for Tasks 1–6.
+"""Graph structure for Tasks 1–7.
 
+START -> reasoner (or summarize first if the history is long)
 reasoner -> pre_hook -> tool_exec (read-only tools) -> reasoner
 pre_hook -> human_approval -> tool_exec (approved order) -> reasoner
 human_approval -> reasoner (rejected order)
 A failed pre-hook check also returns to the reasoner, and END is reached after
 three consecutive failures. The checkpointer is required because the graph
-pauses at human_approval until a person answers.
+pauses at human_approval until a person answers, and it keeps history across questions.
 
 Tools come from an MCP server, discovered at startup. Later tasks insert post_hook
-and summarize between these nodes.
+between tool_exec and the reasoner.
 """
 from langgraph.graph import END, START, StateGraph
 
 from agent.hooks import MAX_CONSECUTIVE_ERRORS, make_pre_hook
 from agent.mcp_client import MCPToolClient
-from agent.nodes import allowed_tools, human_approval, make_reasoner, make_tool_exec
+from agent.nodes import MAX_MESSAGES, allowed_tools, human_approval, make_reasoner, make_summarizer, make_tool_exec
 from agent.state import AgentState
+
+
+def route_to_reasoner(state: AgentState) -> str:
+    """Compress the history first when it is too long; otherwise go straight to the reasoner."""
+    return "summarize" if len(state["messages"]) > MAX_MESSAGES else "reasoner"
 
 
 def route_after_reasoner(state: AgentState) -> str:
@@ -36,8 +42,8 @@ def route_after_pre_hook(state: AgentState) -> str:
 
 
 def route_after_approval(state: AgentState) -> str:
-    """Execute the order only if it was approved."""
-    return "tool_exec" if state["approval"] == "approve" else "reasoner"
+    """Execute the order only if it was approved; a rejection goes back to the reasoner, via the length check."""
+    return "tool_exec" if state["approval"] == "approve" else route_to_reasoner(state)
 
 
 def build_graph(llm, mcp: MCPToolClient, checkpointer=None):
@@ -45,12 +51,14 @@ def build_graph(llm, mcp: MCPToolClient, checkpointer=None):
     tools = allowed_tools(mcp.langchain_tools())
     builder = StateGraph(AgentState)
     builder.add_node("reasoner", make_reasoner(llm, tools))
+    builder.add_node("summarize", make_summarizer(llm))
     builder.add_node("pre_hook", make_pre_hook(mcp))
     builder.add_node("human_approval", human_approval)
     builder.add_node("tool_exec", make_tool_exec(tools, mcp.call))
-    builder.add_edge(START, "reasoner")
+    builder.add_conditional_edges(START, route_to_reasoner, ["summarize", "reasoner"])
+    builder.add_edge("summarize", "reasoner")
     builder.add_conditional_edges("reasoner", route_after_reasoner, ["pre_hook", END])
     builder.add_conditional_edges("pre_hook", route_after_pre_hook, ["reasoner", "human_approval", "tool_exec", END])
-    builder.add_conditional_edges("human_approval", route_after_approval, ["tool_exec", "reasoner"])
-    builder.add_edge("tool_exec", "reasoner")
+    builder.add_conditional_edges("human_approval", route_after_approval, ["tool_exec", "summarize", "reasoner"])
+    builder.add_conditional_edges("tool_exec", route_to_reasoner, ["summarize", "reasoner"])
     return builder.compile(checkpointer=checkpointer)

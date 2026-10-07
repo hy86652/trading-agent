@@ -12,8 +12,10 @@
 - **环境搭建**：已完成
 - **阶段 0（数据与账户准备）**：已完成并通过自检，用户已确认
 - **阶段 1（Task 1–3 最小 Agent）**：已完成并通过用户确认（真实 Gemini 测试：AAPL MA5 = 184.68，与 CSV 一致；离线图检查通过）
-- **阶段 2（Task 4，MCP）**：代码已完成，离线检查通过（真实 MCP Server + 假 LLM，`tools/list` 与 `tools/call` 均经过 MCP）；**真实 Gemini 测试待配额恢复**，之后需用户确认
-- **下一步**：配额恢复后跑真实提问，确认回答与阶段 1 一致；用户确认后进入阶段 3（Task 5–6）
+- **阶段 2（Task 4，MCP）**：已完成并通过用户确认（真实 Gemini 测试 MA5 = 184.68）
+- **阶段 3（Task 5–6 钩子与 HITL）**：Pre-hook（400 校验、20% 上限、连续 3 次失败停止）与人工审批（approve / reject）已完成，用户测试通过。**Post-tool Hook 内容待确认，尚未实现**
+- **阶段 4（Task 7 压缩与检查点）**：代码已完成，离线检查通过（压缩切分不拆分工具调用对、长对话实际压缩、重启后同一 thread 恢复）；`cli.py` 启动与恢复路径已验证；**真实模型的多轮与重启测试待做**
+- **账户状态**：`data/portfolio.json` 当前为现金 99819.36、AAPL 1 股（阶段 3 批准测试的结果，已由用户确认保留）
 
 ---
 
@@ -77,6 +79,8 @@
 | 2026-10-05 | LLM 提供方选定 Gemini，使用 `langchain-google-genai`，key 读取 `GOOGLE_API_KEY` | 用户选择；Groq 不再使用 |
 | 2026-10-05 | 阶段 2：Server 注册全部 4 个工具，Agent 只绑定 3 个只读工具（`READ_ONLY_TOOL_NAMES`），`tool_exec` 同样拒绝未绑定的工具 | 保留 place_order 的安全约束；阶段 3 在 Agent 端放开并加 pre-hook 与审批（用户确认） |
 | 2026-10-05 | MCP Client 在后台线程的事件循环中持有会话，对外提供同步的 `call()` | LangGraph 节点为同步函数，MCP SDK 为异步；SDK 的 stdio 传输要求进出 task group 在同一个 task 中完成 |
+| 2026-10-06 | 阶段 4：超过 10 条消息时压缩最旧的 8 条，切分点后移以免拆散工具调用与结果；压缩在每个问题开始、工具执行后、拒绝订单后检查 | brief 第 6 节；孤立的 tool 结果会导致模型 API 报错 |
+| 2026-10-06 | 阶段 4：一个会话 = 一个 thread，历史跨问题保留；`cli.py --thread <id>` 恢复会话；每个问题重置 pending_order、approval、error_count | 满足"同一 thread id 从上次状态继续"；error_count 不重置会导致恢复后误触发停止 |
 | 2026-10-05 | Server 的 `place_order` 在 Server 端仍可调用，但 Agent 不绑定；Server 的 stdout 只用于协议，不打印 | stdio 传输占用 stdout；安全由 Agent 端控制 |
 | 2026-10-05 | 模型名从 `gemini-2.5-flash` 改为 `gemini-3.8-flash` | 2.5-flash 对新用户返回 404，错误信息建议 3.8-flash；3.8-flash 测试通过 |
 | 2026-10-05 | `cli.py` 增加 `to_text()`，只取 Gemini 返回内容块中的文本 | Gemini 的 content 可能是列表，直接打印会显示原始结构 |

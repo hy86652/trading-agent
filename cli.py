@@ -1,4 +1,9 @@
-"""Local terminal entry point. Each question gets its own thread; orders pause for approval in the terminal."""
+"""Local terminal entry point. A session is one thread: history is kept across questions and survives restarts.
+
+Start a new session with `python cli.py`. Resume one with `python cli.py --thread <id>`; the id is printed at start.
+Orders pause for approval in the terminal.
+"""
+import argparse
 import sqlite3
 import uuid
 from contextlib import closing
@@ -11,9 +16,10 @@ from langgraph.types import Command
 
 from agent.graph import build_graph
 from agent.mcp_client import MCPToolClient
+from agent.nodes import to_text
 
 ROOT = Path(__file__).resolve().parent
-# Gitignored (*.db). Stage 4 relies on this file to resume after a restart.
+# Gitignored (*.db). Conversation state is kept here, so a restarted session can resume.
 CHECKPOINT_PATH = ROOT / "data" / "checkpoints.db"
 
 # Provider chosen: Gemini. Changing the model means editing this one constant.
@@ -27,22 +33,17 @@ def build_llm():
     return ChatGoogleGenerativeAI(model=GEMINI_MODEL, temperature=0)
 
 
-def to_text(content: str | list) -> str:
-    """Gemini may return a list of content blocks instead of a plain string; keep only the text parts."""
-    if isinstance(content, str):
-        return content
-    return "".join(block.get("text", "") for block in content if isinstance(block, dict))
-
-
-def new_state(question: str) -> dict:
-    """Initial state for one question; every field from state.py is present."""
-    return {
+def question_input(question: str, resuming: bool) -> dict:
+    """Input for one question. Per-question fields are reset; history and summary are kept when resuming."""
+    state = {
         "messages": [HumanMessage(content=question)],
-        "summary": "",
         "pending_order": None,
         "approval": None,
         "error_count": 0,
     }
+    if not resuming:
+        state["summary"] = ""
+    return state
 
 
 def ask_approval(payload: dict) -> str:
@@ -56,20 +57,27 @@ def ask_approval(payload: dict) -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="模拟交易助手")
+    parser.add_argument("--thread", help="resume the session with this id")
+    args = parser.parse_args()
+
     load_dotenv(ROOT / ".env")
     CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    thread_id = args.thread or str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
     # The MCP server runs as a subprocess for the whole session and is shut down on exit.
     with MCPToolClient() as mcp, closing(sqlite3.connect(CHECKPOINT_PATH, check_same_thread=False)) as conn:
         graph = build_graph(build_llm(), mcp, SqliteSaver(conn))
-        print("模拟交易助手（输入 quit 退出）")
+        resuming = bool(graph.get_state(config).values)
+        print(f"模拟交易助手（会话 {thread_id}{'，已恢复' if resuming else '，新会话'}）。输入 quit 退出。")
         while True:
             question = input("> ").strip()
             if question.lower() in ("quit", "exit"):
                 break
             if not question:
                 continue
-            config = {"configurable": {"thread_id": str(uuid.uuid4())}}
-            result = graph.invoke(new_state(question), config)
+            result = graph.invoke(question_input(question, resuming), config)
+            resuming = True
             # The graph pauses at human_approval; resume it with the person's decision.
             while "__interrupt__" in result:
                 decision = ask_approval(result["__interrupt__"][0].value)

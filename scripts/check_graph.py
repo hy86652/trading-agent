@@ -5,34 +5,41 @@ The approval check changes the simulated account, so portfolio.json is restored 
 
 Run from the project root with: python -m scripts.check_graph
 """
+import contextlib
 import json
+import sqlite3
+import tempfile
 import uuid
 from pathlib import Path
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 from agent.graph import build_graph
 from agent.hooks import MAX_CONSECUTIVE_ERRORS
 from agent.mcp_client import MCPToolClient
-from agent.nodes import allowed_tools
+from agent.nodes import allowed_tools, make_summarizer
+from cli import question_input
 
 PORTFOLIO_PATH = Path(__file__).resolve().parent.parent / "data" / "portfolio.json"
 
 
 class ScriptedLLM:
-    """Replays canned replies so the reasoner loop can be exercised offline."""
+    """Replays canned replies so the reasoner loop can be exercised offline. Records what it was sent."""
 
     def __init__(self, replies: list[AIMessage]) -> None:
         self._replies = list(replies)
         self.bound: set[str] = set()
+        self.seen: list = []
 
     def bind_tools(self, tools):
         self.bound = {t.name for t in tools}
         return self
 
     def invoke(self, messages):
+        self.seen = list(messages)
         return self._replies.pop(0)
 
 
@@ -141,6 +148,8 @@ def check_approved_order_is_executed(mcp: MCPToolClient) -> None:
     """Approving resumes the graph, the order goes to the MCP server, and the account changes."""
     original = PORTFOLIO_PATH.read_text(encoding="utf-8")
     try:
+        # Start from an empty account so the expected position is known, whatever the real account holds.
+        PORTFOLIO_PATH.write_text(json.dumps({"cash": 100000.0, "positions": {}}), encoding="utf-8")
         llm = ScriptedLLM([order_call("o4", quantity=1), AIMessage(content="已买入 1 股 AAPL。")])
         graph = build_graph(llm, mcp, MemorySaver())
         config = new_config()
@@ -156,7 +165,76 @@ def check_approved_order_is_executed(mcp: MCPToolClient) -> None:
         PORTFOLIO_PATH.write_text(original, encoding="utf-8")
 
 
+def _with_id(message):
+    """Summarize removes messages by id; the graph assigns ids itself, so the offline test has to as well."""
+    message.id = str(uuid.uuid4())
+    return message
+
+
+def check_summary_cut_keeps_tool_pairs() -> None:
+    """The oldest 8 messages are compressed, but never a tool result away from its tool call."""
+    llm = ScriptedLLM([AIMessage(content="摘要"), AIMessage(content="摘要")])  # one reply per summarize call below
+    summarize = make_summarizer(llm)
+
+    plain = [_with_id(HumanMessage(content=f"问题{i}")) for i in range(11)]
+    removed = summarize({"messages": plain, "summary": ""})["messages"]
+    assert len(removed) == 8, len(removed)
+
+    # Index 7 calls a tool and index 8 is its result, so the cut must move past the result.
+    paired = [
+        _with_id(HumanMessage(content="a")),
+        _with_id(AIMessage(content="b")),
+        _with_id(HumanMessage(content="c")),
+        _with_id(AIMessage(content="d")),
+        _with_id(HumanMessage(content="e")),
+        _with_id(AIMessage(content="f")),
+        _with_id(HumanMessage(content="g")),
+        _with_id(AIMessage(content="", tool_calls=[{"name": "get_price", "args": {"ticker": "AAPL"}, "id": "t"}])),
+        _with_id(ToolMessage(content="{}", tool_call_id="t", name="get_price")),
+        _with_id(AIMessage(content="h")),
+        _with_id(HumanMessage(content="i")),
+    ]
+    removed = summarize({"messages": paired, "summary": ""})["messages"]
+    assert len(removed) == 9, len(removed)
+
+
+def check_long_history_is_summarized(mcp: MCPToolClient) -> None:
+    """After 10 messages, the next question first compresses the history; the summary is kept in state."""
+    replies = [AIMessage(content=f"回答{i}") for i in range(1, 6)]
+    replies += [AIMessage(content="摘要：用户问过五个问题"), AIMessage(content="第六个回答")]
+    llm = ScriptedLLM(replies)
+    graph = build_graph(llm, mcp, MemorySaver())
+    config = new_config()
+    for i in range(1, 7):
+        result = graph.invoke(question_input(f"问题{i}", resuming=i > 1), config)
+    assert result["summary"] == "摘要：用户问过五个问题", result["summary"]
+    assert len(result["messages"]) == 4, [type(m).__name__ for m in result["messages"]]
+    assert result["messages"][-1].content == "第六个回答"
+
+
+def check_history_survives_restart(mcp: MCPToolClient) -> None:
+    """A new process (new SqliteSaver connection) resumes the same thread and still sees the earlier question."""
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "checkpoints.db"
+        config = new_config()
+
+        with contextlib.closing(sqlite3.connect(db, check_same_thread=False)) as conn:
+            first = ScriptedLLM([AIMessage(content="我记下了：AAPL")])
+            build_graph(first, mcp, SqliteSaver(conn)).invoke(question_input("关注 AAPL", resuming=False), config)
+
+        with contextlib.closing(sqlite3.connect(db, check_same_thread=False)) as conn:
+            second = ScriptedLLM([AIMessage(content="你刚才说关注 AAPL。")])
+            graph = build_graph(second, mcp, SqliteSaver(conn))
+            assert graph.get_state(config).values, "the thread must exist after a restart"
+            result = graph.invoke(question_input("我刚才说关注哪只股票？", resuming=True), config)
+
+        texts = [m.content for m in second.seen]
+        assert "关注 AAPL" in texts, texts
+        assert result["messages"][-1].content == "你刚才说关注 AAPL。"
+
+
 def main() -> None:
+    check_summary_cut_keeps_tool_pairs()
     with MCPToolClient() as mcp:
         check_discovery(mcp)
         check_tool_round_trip(mcp)
@@ -165,6 +243,8 @@ def main() -> None:
         check_bad_order_is_corrected_then_rejected(mcp)
         check_three_failures_stop_the_turn(mcp)
         check_approved_order_is_executed(mcp)
+        check_long_history_is_summarized(mcp)
+        check_history_survives_restart(mcp)
     print("graph checks passed")
 
 
