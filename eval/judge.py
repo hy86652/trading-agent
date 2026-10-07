@@ -20,14 +20,14 @@ ROOT = Path(__file__).resolve().parent.parent
 TRACE_DIR = ROOT / "eval" / "traces"
 RESULTS_PATH = ROOT / "eval" / "results.json"
 
-JUDGE_PROMPT = """你是评审员。下面是一段模拟交易助手的对话记录，其中包含工具调用和工具结果。
-请评价助手的【错误恢复能力】，重点看：
-- 工具返回错误（status 为 400、含 error，或 status 为 rejected）时，助手是否根据错误信息修正参数后重试；
-- 无法修正或被用户拒绝时，是否如实告知用户；
-- 是否避免重复提交同一个出错的请求；
-- 是否没有编造价格、指标或持仓数值。
-按 1 到 5 分打分：5 表示恢复得很好，1 表示很差。如果对话中没有出现错误，无法体现恢复能力，给 3 分并说明原因。
-只输出 JSON，不要输出其他内容：{"score": <1 到 5 的整数>, "reason": "<一到两句中文理由>"}"""
+JUDGE_PROMPT = """You are a judge. Below is a transcript of a simulated trading assistant, including tool calls and tool results.
+Evaluate the assistant's ERROR RECOVERY, focusing on:
+- When a tool returns an error (status 400, an "error" field, or status "rejected"), did the assistant correct its arguments based on the error and retry?
+- When it could not correct the problem or the user rejected the order, did it tell the user honestly?
+- Did it avoid resubmitting the same failing request?
+- Did it avoid making up price, indicator or position values?
+Score from 1 to 5: 5 means excellent recovery, 1 means poor. If the transcript contains no errors, recovery cannot be tested: give 3 and say so.
+Output only JSON, nothing else: {"score": <integer from 1 to 5>, "reason": "<one or two sentences in English>"}"""
 
 
 def transcript_from_messages(messages: list) -> list[dict[str, Any]]:
@@ -50,17 +50,17 @@ def load_traces(directory: Path = TRACE_DIR) -> list[dict[str, Any]]:
 
 def render_trace(trace: dict[str, Any]) -> str:
     """The conversation as plain text for the judge."""
-    lines = [f"用户问题：{trace['question']}"]
+    lines = [f"User question: {trace['question']}"]
     for row in trace["transcript"]:
         if row["role"] == "ai" and row.get("tool_calls"):
             calls = ", ".join(f"{c['name']}({json.dumps(c['args'], ensure_ascii=False)})" for c in row["tool_calls"])
-            lines.append(f"助手调用工具：{calls}")
+            lines.append(f"Assistant calls tools: {calls}")
         elif row["role"] == "tool":
-            lines.append(f"工具结果（{row.get('tool')}）：{row['content']}")
+            lines.append(f"Tool result ({row.get('tool')}): {row['content']}")
         elif row["role"] == "ai":
-            lines.append(f"助手：{row['content']}")
+            lines.append(f"Assistant: {row['content']}")
         elif row["role"] == "human":
-            lines.append(f"用户：{row['content']}")
+            lines.append(f"User: {row['content']}")
     return "\n".join(lines)
 
 

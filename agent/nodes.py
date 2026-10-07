@@ -1,4 +1,4 @@
-"""Graph nodes: the reasoner decides, the pre-hook checks, a human approves, the executor acts (Task 2–6).
+"""Graph nodes: the reasoner decides, the pre-hook checks, a human approves, the executor acts (Tasks 2–6).
 
 The reasoner never runs a tool itself. It only emits tool-call requests or a
 final answer. Orders pass the pre-hook (hooks.py) and a human approval before
@@ -22,19 +22,21 @@ ALLOWED_TOOL_NAMES = frozenset({"get_price", "get_indicators", "get_portfolio", 
 MAX_MESSAGES = 10
 SUMMARIZE_COUNT = 8
 
-SUMMARY_PROMPT = """你是对话压缩助手。把下面的对话压缩成一段简短的中文摘要。
-保留：用户提出的请求、已经做出的决定（包括订单是否批准或拒绝）、重要结论。
-只写对话里出现过的事实，不要补充对话之外的价格、指标或持仓数值。"""
+SUMMARY_PROMPT = """You are a conversation compression assistant. Compress the conversation below into a short summary.
+Keep: the user's requests, the decisions made (including whether an order was approved or rejected), and key conclusions.
+Only record facts that appear in the conversation. Do not add any price, indicator or position values that are not in it.
+Write the summary in the language the conversation is mostly written in."""
 
-SYSTEM_PROMPT = """你是模拟交易助手。全程只使用模拟数据与模拟账户。
+SYSTEM_PROMPT = """You are a simulated trading assistant. Use only simulated data and the simulated account at all times.
 
-规则：
-1. 所有价格、指标、持仓数值必须来自工具返回，不得自行估算或编造。
-2. 需要数据时调用工具获取；不要凭记忆回答行情或账户问题。
-3. 如果工具返回 status 为 400 或含 error，根据错误信息修正参数后重试；无法修正时如实告知用户。
-4. 买入或卖出必须调用 place_order，且每次只调用一个 place_order。订单需要用户批准，不要声称已经成交，以工具返回为准。
-5. 如果工具返回 status 为 rejected，说明用户拒绝了这笔订单。如实告知用户，不要重复提交同一订单。
-6. 你只负责决定下一步做什么，不要假装自己执行了任何操作。"""
+Rules:
+1. Every price, indicator and position value must come from a tool result. Never estimate or make up values.
+2. Call a tool to get data. Do not answer market or account questions from memory.
+3. If a tool result has status 400 or contains an error, correct the arguments based on the error and retry. If you cannot correct it, tell the user honestly.
+4. To buy or sell, call place_order, and call it only once per turn. The order needs the user's approval. Do not say the order was filled; the tool result is the only source of truth.
+5. If a tool result has status "rejected", the user rejected that order. Tell the user, and do not resubmit the same order.
+6. You only decide the next step. Do not pretend that you performed any action.
+7. Reply in the same language as the user's latest question."""
 
 
 def allowed_tools(discovered: list[StructuredTool]) -> list[StructuredTool]:
@@ -69,7 +71,7 @@ def make_reasoner(llm: Any, tools: list[StructuredTool]) -> Callable[[AgentState
         # so they never accumulate in the history.
         system = SYSTEM_PROMPT
         if state.get("summary"):
-            system += f"\n\n早前对话摘要（仅供参考，数值以工具返回为准）：\n{state['summary']}"
+            system += f"\n\nEarlier conversation summary (for reference only; values come from tools):\n{state['summary']}"
         with get_client().start_as_current_observation(
             name="llm_reasoner", as_type="generation", input=state["messages"][-1].content
         ) as generation:
@@ -94,7 +96,7 @@ def make_summarizer(llm: Any) -> Callable[[AgentState], dict[str, Any]]:
         transcript = "\n".join(_describe(m) for m in old)
         prompt = [
             SystemMessage(SUMMARY_PROMPT),
-            HumanMessage(content=f"已有摘要：{state.get('summary') or '无'}\n\n需要压缩的对话：\n{transcript}"),
+            HumanMessage(content=f"Existing summary: {state.get('summary') or 'none'}\n\nConversation to compress:\n{transcript}"),
         ]
         with get_client().start_as_current_observation(
             name="llm_summarize", as_type="generation", input=transcript
@@ -109,10 +111,10 @@ def make_summarizer(llm: Any) -> Callable[[AgentState], dict[str, Any]]:
 
 def _describe(message: Any) -> str:
     """One line per message for the summary prompt, including the tool calls the model made."""
-    role = {"human": "用户", "ai": "助手", "tool": "工具结果"}.get(message.type, message.type)
+    role = {"human": "User", "ai": "Assistant", "tool": "Tool result"}.get(message.type, message.type)
     text = to_text(message.content)
     if isinstance(message, AIMessage) and message.tool_calls:
-        text += f" [调用工具: {', '.join(c['name'] for c in message.tool_calls)}]"
+        text += f" [called tools: {', '.join(c['name'] for c in message.tool_calls)}]"
     return f"{role}: {text}"
 
 

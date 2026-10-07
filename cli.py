@@ -51,15 +51,15 @@ def question_input(question: str, resuming: bool) -> dict:
 def ask_approval(payload: dict) -> str:
     """Show the pending order and wait for approve or reject. Only those two answers are accepted."""
     order = payload["order"]
-    print(f"\n[需要审批] 模拟{'买入' if order['side'] == 'buy' else '卖出'} {order['ticker']} × {order['quantity']} 股，约 {payload['amount']}")
+    print(f"\n[Approval needed] Simulated {order['side']} {order['quantity']} share(s) of {order['ticker']}, about {payload['amount']}")
     while True:
-        decision = input("输入 approve 批准 / reject 拒绝 > ").strip().lower()
+        decision = input("Type approve or reject > ").strip().lower()
         if decision in ("approve", "reject"):
             return decision
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="模拟交易助手")
+    parser = argparse.ArgumentParser(description="Simulated trading assistant")
     parser.add_argument("--thread", help="resume the session with this id")
     args = parser.parse_args()
 
@@ -73,7 +73,7 @@ def main() -> None:
     with MCPToolClient() as mcp, closing(sqlite3.connect(CHECKPOINT_PATH, check_same_thread=False)) as conn:
         graph = build_graph(build_llm(), mcp, SqliteSaver(conn))
         resuming = bool(graph.get_state(config).values)
-        print(f"模拟交易助手（会话 {thread_id}{'，已恢复' if resuming else '，新会话'}）。输入 quit 退出。")
+        print(f"Simulated trading assistant (session {thread_id}, {'resumed' if resuming else 'new'}). Type quit to exit.")
         while True:
             question = input("> ").strip()
             if question.lower() in ("quit", "exit"):
@@ -96,8 +96,8 @@ def main() -> None:
             except Exception as exc:
                 # A failed model call (quota, network) should not end the session. The thread is checkpointed,
                 # so the conversation can continue once the problem clears.
-                print(f"\n[出错] 本次请求未完成：{type(exc).__name__}: {str(exc)[:200]}")
-                print("会话仍然保留，可以稍后继续提问（配额错误通常需要等到次日重置）。")
+                print(f"\n[Error] This request did not complete: {type(exc).__name__}: {str(exc)[:200]}")
+                print("The session is kept; you can ask again later (quota errors usually reset the next day).")
                 continue
             print(answer)
         langfuse.flush()

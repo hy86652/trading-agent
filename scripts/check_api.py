@@ -39,11 +39,11 @@ def main() -> None:
     # The app loads .env on startup, which may hold real Langfuse keys. Offline checks must not send traces.
     os.environ["LANGFUSE_TRACING_ENABLED"] = "false"
     replies = [
-        AIMessage(content="AAPL 的价格已查询。"),                       # /webhook: text answer
+        AIMessage(content="The AAPL price has been checked."),          # /webhook: text answer
         order(1),                                                      # /webhook: order waits for approval
-        AIMessage(content="好的，已取消。"),                             # /approve reject
+        AIMessage(content="OK, the order was cancelled."),              # /approve reject
         order(1),                                                      # /webhook: order waits again
-        AIMessage(content="已买入 1 股 AAPL。"),                         # /approve approve
+        AIMessage(content="Bought 1 share of AAPL."),                   # /approve approve
     ]
     original = PORTFOLIO_PATH.read_text(encoding="utf-8")
     with tempfile.TemporaryDirectory() as tmp:
@@ -53,20 +53,20 @@ def main() -> None:
             with TestClient(app) as client:
                 assert client.get("/health").json() == {"status": "ok"}
 
-                first = client.post("/webhook", json={"question": "AAPL 现价多少？"}).json()
-                assert first["status"] == "completed" and first["answer"] == "AAPL 的价格已查询。", first
+                first = client.post("/webhook", json={"question": "What is the AAPL price?"}).json()
+                assert first["status"] == "completed" and first["answer"] == "The AAPL price has been checked.", first
                 thread = first["thread_id"]
 
-                pending = client.post("/webhook", json={"question": "买 1 股 AAPL", "thread_id": thread}).json()
+                pending = client.post("/webhook", json={"question": "Buy 1 share of AAPL", "thread_id": thread}).json()
                 assert pending["status"] == "pending_approval", pending
                 assert pending["order"] == {"ticker": "AAPL", "side": "buy", "quantity": 1}, pending
                 assert pending["amount"] > 0
 
-                blocked = client.post("/webhook", json={"question": "再问一次", "thread_id": thread})
+                blocked = client.post("/webhook", json={"question": "Ask again", "thread_id": thread})
                 assert blocked.status_code == 409, blocked.status_code
 
                 rejected = client.post("/approve", json={"thread_id": thread, "decision": "reject"}).json()
-                assert rejected["status"] == "completed" and rejected["answer"] == "好的，已取消。", rejected
+                assert rejected["status"] == "completed" and rejected["answer"] == "OK, the order was cancelled.", rejected
                 assert json.loads(PORTFOLIO_PATH.read_text(encoding="utf-8"))["positions"] == {}
 
                 nothing = client.post("/approve", json={"thread_id": thread, "decision": "approve"})
@@ -74,10 +74,10 @@ def main() -> None:
 
                 assert client.post("/approve", json={"thread_id": thread, "decision": "maybe"}).status_code == 422
 
-                again = client.post("/webhook", json={"question": "再买 1 股 AAPL", "thread_id": thread}).json()
+                again = client.post("/webhook", json={"question": "Buy 1 share of AAPL again", "thread_id": thread}).json()
                 assert again["status"] == "pending_approval", again
                 done = client.post("/approve", json={"thread_id": thread, "decision": "approve"}).json()
-                assert done["status"] == "completed" and done["answer"] == "已买入 1 股 AAPL。", done
+                assert done["status"] == "completed" and done["answer"] == "Bought 1 share of AAPL.", done
                 assert json.loads(PORTFOLIO_PATH.read_text(encoding="utf-8"))["positions"] == {"AAPL": 1}
         finally:
             PORTFOLIO_PATH.write_text(original, encoding="utf-8")

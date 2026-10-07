@@ -1,80 +1,80 @@
-# 模拟交易助手 Agent
+# Simulated Trading Assistant Agent
 
-一个用 LangGraph 搭建的模拟交易助手。Agent 通过 MCP 调用行情和账户工具，下单前经过确定性校验，并需要人工审批。
+A simulated trading assistant built with LangGraph. The agent calls market and account tools over MCP, checks every order with deterministic rules before it is sent, and requires human approval to trade.
 
-> **只用于模拟。** 所有行情是生成的模拟数据，账户是本地 JSON 文件。项目不连接任何真实券商或资金账户。
+> **Simulation only.** All market data is generated mock data, and the account is a local JSON file. The project does not connect to any real broker or funds account.
 
-## 功能
+## Features
 
-- 查询模拟行情（最近收盘价）、计算指标（MA、RSI）、查看模拟账户
-- 模拟下单：下单前检查 ticker、方向、数量、现金或持仓、单笔不超过总资产的 20%
-- 下单需要人工批准（终端 `approve` / `reject`，或 API 的 `/approve`）
-- 上下文超过 10 条消息时压缩最旧的 8 条；会话状态保存在 SQLite，可以用会话 ID 恢复
-- 工具调用日志写入 `data/logs/tool_calls.jsonl`；可选接入 Langfuse 追踪
+- Simulated market data (latest close), indicators (MA, RSI) and account view
+- Simulated orders, checked before approval: ticker, side, quantity, cash or position, and at most 20% of total assets per order
+- Human approval for every order (`approve` / `reject` in the terminal, or `/approve` over the API)
+- When the history exceeds 10 messages, the oldest 8 are compressed. Session state is stored in SQLite and can be resumed with a session ID
+- Tool calls are logged to `data/logs/tool_calls.jsonl`. Optional Langfuse tracing
 
-## 架构
+## Architecture
 
 ```
-START → [summarize] → reasoner ─┬─(文字回答)──────────────→ END
-                                └─(工具调用)→ pre_hook ─┬─(校验失败 400)→ reasoner
-                                                        ├─(下单)→ human_approval ─┬─(approve)→ tool_exec
-                                                        │                         └─(reject)→ reasoner
-                                                        └─(只读工具)────────────→ tool_exec
+START → [summarize] → reasoner ─┬─(text answer)────────────→ END
+                                └─(tool calls)→ pre_hook ─┬─(check failed, 400)→ reasoner
+                                                          ├─(place_order)→ human_approval ─┬─(approve)→ tool_exec
+                                                          │                                └─(reject)→ reasoner
+                                                          └─(read-only tools)─────────────→ tool_exec
 tool_exec → post_hook → [summarize] → reasoner
 ```
 
-- **reasoner**：只决定下一步，不执行工具。
-- **pre_hook**：确定性规则（`agent/hooks.py`）。失败时返回模拟的 400 错误，LLM 可以据此修正。连续 3 次失败则停止本轮。
-- **human_approval**：用 LangGraph 的 `interrupt` 暂停，状态存入 checkpointer。
-- **tool_exec**：通过 MCP 客户端调用工具（`agent/mcp_client.py` → `mcp_server/server.py`）。
-- **post_hook**：为成交的订单加一条摘要，截断过长输出，写日志。
-- **summarize**：独立的 LLM 调用，压缩旧消息。
+- **reasoner**: decides the next step only. It never runs a tool.
+- **pre_hook**: deterministic rules (`agent/hooks.py`). A failure returns a simulated HTTP 400 that the LLM can use to correct itself. Three consecutive failures stop the turn.
+- **human_approval**: pauses with LangGraph's `interrupt`. The state is saved in the checkpointer.
+- **tool_exec**: calls tools through the MCP client (`agent/mcp_client.py` → `mcp_server/server.py`).
+- **post_hook**: adds a summary to a filled order, truncates very long outputs, and writes the log.
+- **summarize**: a separate LLM call that compresses old messages.
 
-## 目录
+## Layout
 
 ```
-agent/        图、节点、钩子、MCP 客户端、观测配置
-mcp_server/   MCP Server，注册 4 个工具
-api/          FastAPI 接口
-eval/         录制 trace（record.py）与 LLM-judge 评估（judge.py）
-scripts/      离线检查脚本、生成模拟行情
-data/         模拟行情（CSV）、模拟账户（portfolio.json）、检查点与日志（不提交）
-cli.py        终端入口
-tools.py      4 个工具的 Python 实现，MCP Server 调用它们
+agent/        graph, nodes, hooks, MCP client, observability setup
+mcp_server/   MCP server that exposes the 4 tools
+api/          FastAPI application
+eval/         trace recording (record.py) and LLM-as-a-judge scoring (judge.py)
+scripts/      offline checks and mock market data generation
+data/         mock prices (CSV), mock account (portfolio.json), checkpoints and logs (not committed)
+cli.py        terminal entry point
+tools.py      Python implementations of the 4 tools; the MCP server calls them
 ```
 
-## 安装
+## Setup
 
-需要 Python 3.12（不要用 3.13）。
+Python 3.12 is required (not 3.13).
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-`requirements.txt` 是 Windows 上的 `pip freeze`，包含仅 Windows 可用的 `pywin32`。Linux 环境请去掉这一行，Dockerfile 已经这样处理。
+`requirements.txt` is a `pip freeze` from Windows and includes `pywin32`, which only installs on Windows. On Linux, remove that line. The Dockerfile already does this.
 
-生成模拟行情（仓库已包含，只在需要重新生成时运行）：
+To regenerate the mock prices (already in the repo; only needed if you want new data):
 
 ```powershell
 .\.venv\Scripts\python.exe -m scripts.gen_data
 ```
 
-## 配置
+## Configuration
 
-在项目根目录创建 `.env`（不要提交）：
+Create a `.env` file in the project root (do not commit it):
 
-| 变量 | 必需 | 说明 |
+| Variable | Required | Description |
 |---|---|---|
-| `GOOGLE_API_KEY` | 是 | Gemini API key |
-| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | 否 | 不填则关闭追踪 |
-| `LANGFUSE_HOST` | 否 | 密钥所在区域的地址，例如 `https://us.cloud.langfuse.com` |
+| `GOOGLE_API_KEY` | Yes | Gemini API key |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | No | Leave empty to disable tracing |
+| `LANGFUSE_HOST` | No | Host for the region your keys belong to, e.g. `https://us.cloud.langfuse.com` |
 
-`GROQ_API_KEY` 在 `.env` 模板中，但当前代码未使用。模型名在 `cli.py` 的 `GEMINI_MODEL` 中修改。
+`GROQ_API_KEY` appears in the `.env` template, but the code does not use it. Change the model name with `GEMINI_MODEL` in `cli.py`.
 
-## 运行
+## Running
 
-**离线检查**（不需要 API key，不消耗配额）：
+**Offline checks** (no API key needed, no quota used):
 
 ```powershell
 .\.venv\Scripts\python.exe -m scripts.check_graph
@@ -82,57 +82,57 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m scripts.check_api
 ```
 
-这些检查会启动真实的 MCP Server，并在结束时还原模拟账户。
+These checks start the real MCP server, and the one that places an order restores the simulated account afterwards.
 
-**终端**：
+**Terminal**:
 
 ```powershell
-.\.venv\Scripts\python.exe cli.py                 # 新会话，启动时打印会话 ID
-.\.venv\Scripts\python.exe cli.py --thread <ID>   # 恢复会话
+.\.venv\Scripts\python.exe cli.py                 # new session; prints the session ID at start
+.\.venv\Scripts\python.exe cli.py --thread <ID>   # resume a session
 ```
 
-**API**：
+**API**:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn api.main:app --port 8000
 ```
 
 ```powershell
-# 提问；遇到订单会返回 pending_approval
-curl -X POST localhost:8000/webhook -H "Content-Type: application/json" -d '{"question": "买 1 股 AAPL"}'
-# 审批（用上一步返回的 thread_id）
+# Ask a question; an order returns pending_approval
+curl -X POST localhost:8000/webhook -H "Content-Type: application/json" -d '{"question": "Buy 1 share of AAPL"}'
+# Approve or reject (use the thread_id from the previous response)
 curl -X POST localhost:8000/approve -H "Content-Type: application/json" -d '{"thread_id": "<ID>", "decision": "reject"}'
 ```
 
-**评估**（会调用真实模型，消耗配额）：
+**Evaluation** (calls the real model and uses quota):
 
 ```powershell
-.\.venv\Scripts\python.exe -m eval.record   # 录制 eval/cases.json 中的用例到 eval/traces/
-.\.venv\Scripts\python.exe -m eval.judge    # 评分，结果写入 eval/results.json
+.\.venv\Scripts\python.exe -m eval.record   # record the cases in eval/cases.json to eval/traces/
+.\.venv\Scripts\python.exe -m eval.judge    # score the traces; results go to eval/results.json
 ```
 
-**容器**（尚未构建验证）：
+**Container** (not yet built or verified):
 
 ```bash
 docker build -t trading-agent .
 docker run -p 7860:7860 -e GOOGLE_API_KEY=... trading-agent
 ```
 
-## 安全边界
+## Safety boundaries
 
-- 只使用模拟数据和模拟账户，不接入任何真实交易接口。
-- 不读取、打印、提交 API key。密钥只从 `.env` 或托管平台的环境变量读取。
-- `place_order` 只有通过 pre-hook 且经人工批准后才会执行。
-- 大模型只能通过工具获得价格和持仓。摘要和回答中的数值应以工具返回为准。
+- Only simulated data and a simulated account are used. No real trading interface is connected.
+- API keys are never read, printed or committed by the code. They come from `.env` or the hosting platform's environment variables.
+- `place_order` runs only after it passes the pre-hook and is approved by a person.
+- The model gets prices and positions only from tools. Numbers in summaries and answers should match tool results.
 
-## 已知风险
+## Known risks
 
-1. **线上审批**：终端审批只适用于本地。线上通过 `/webhook` 和 `/approve` 两步完成审批。拿到 `thread_id` 的人都可以审批该线程，因此线上不应对公网开放下单能力，或者应加上鉴权（目前没有）。
-2. **检查点持久性**：检查点保存在 SQLite 文件中。Render、HF Spaces 等平台的磁盘在容器重启后可能丢失，会话会随之丢失。
-3. **模型幻觉**：模型可能编造价格或指标。系统提示要求数值来自工具，评估中会重点观察，但不能完全避免。
-4. **免费档限流**：Gemini 免费档每天 20 次请求。录制和评估会很快耗尽配额，超出后请求会失败，直到次日重置。
-5. **追踪数据**：开启 Langfuse 后，提问内容和工具结果会发送到 Langfuse。不要在提问中输入真实的个人或账户信息。
+1. **Approval online**: terminal approval only works locally. Online, approval is two requests: `/webhook` and then `/approve`. Anyone who has a `thread_id` can approve that thread. The API has no authentication yet, so do not expose order placement to the public internet without adding it.
+2. **Checkpoint persistence**: checkpoints are stored in a SQLite file. On platforms such as Render or HF Spaces, the disk may be lost when the container restarts, and sessions go with it.
+3. **Model hallucination**: the model may make up prices or indicators. The system prompt requires values from tools, and the evaluation watches for this, but it cannot be fully prevented.
+4. **Free-tier limits**: the Gemini free tier allows 20 requests per day. Recording and evaluation will use that up quickly. Once it is exhausted, requests fail until the next day.
+5. **Trace data**: with Langfuse enabled, questions and tool results are sent to Langfuse. Do not type real personal or account information into questions.
 
-## 阶段进度
+## Progress
 
-见 `PROGRESS.md`。
+See `PROGRESS.md`.

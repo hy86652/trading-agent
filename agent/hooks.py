@@ -85,7 +85,7 @@ def make_pre_hook(mcp: MCPToolClient) -> Callable[[AgentState], dict[str, Any]]:
             )
         count = state["error_count"] + 1
         if count >= MAX_CONSECUTIVE_ERRORS:
-            messages.append(AIMessage(content="连续 3 次订单校验失败，已停止本次请求。请检查订单内容后再试。"))
+            messages.append(AIMessage(content="The order failed validation 3 times in a row, so this request was stopped. Please check the order details and try again."))
         return {"messages": messages, "error_count": count, "pending_order": None}
 
     return pre_hook
@@ -112,12 +112,12 @@ def make_post_hook(log_path: Path) -> Callable[[AgentState], dict[str, Any]]:
                 output = json.loads(result.content)
                 if result.name == "place_order" and output.get("status") == "filled":
                     output["summary"] = (
-                        f"已{'买入' if output['side'] == 'buy' else '卖出'} {output['ticker']} × {output['quantity']} 股，"
-                        f"成交价 {output['price']}，剩余现金 {output['cash']}"
+                        f"{'Bought' if output['side'] == 'buy' else 'Sold'} {output['ticker']} × {output['quantity']} share(s) "
+                        f"at {output['price']}, cash left {output['cash']}"
                     )
                 content = json.dumps(output, ensure_ascii=False)
                 if len(content) > MAX_TOOL_OUTPUT_CHARS:
-                    content = content[:MAX_TOOL_OUTPUT_CHARS] + f"...[已截断，原长度 {len(content)} 字符]"
+                    content = content[:MAX_TOOL_OUTPUT_CHARS] + f"...[truncated, original length {len(content)} chars]"
                 log.write(json.dumps({
                     "time": datetime.now(timezone.utc).isoformat(),
                     "tool": result.name,

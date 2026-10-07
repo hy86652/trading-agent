@@ -1,136 +1,147 @@
-# 项目进度与上下文记录
+# Project Progress and Context Log
 
-> 本文件是项目的**运行日志**，用来在每次新会话开始时快速恢复上下文。
-> 项目的需求与约定以 `project_brief.md` 为准（位于 `D:\github\tradeing_agent\project_brief.md`）。
+> This file is the **running log** of the project. It lets a new session pick up the context quickly.
+> Requirements and conventions are defined in `project_brief.md` (located at `D:\github\tradeing_agent\project_brief.md`). The brief is written in Chinese.
 >
-> **约定**：每次开始工作前先读本文件和 `project_brief.md`；每完成一个阶段或做出一个重要决策后，回来更新本文件。
+> **Convention**: read this file and `project_brief.md` before starting work. After finishing a stage or making an important decision, come back and update this file.
 
 ---
 
-## 1. 当前状态（最后更新：2026-10-07）
+## 1. Current status (last updated: 2026-10-07)
 
-- **环境搭建**：已完成
-- **阶段 0（数据与账户准备）**：已完成并通过自检，用户已确认
-- **阶段 1（Task 1–3 最小 Agent）**：已完成并通过用户确认（真实 Gemini 测试：AAPL MA5 = 184.68，与 CSV 一致；离线图检查通过）
-- **阶段 2（Task 4，MCP）**：已完成并通过用户确认（真实 Gemini 测试 MA5 = 184.68）
-- **阶段 3（Task 5–6 钩子与 HITL）**：Pre-hook（400 校验、20% 上限、连续 3 次失败停止）与人工审批已完成，用户测试通过。Post-tool Hook 已实现（用户确认三项：成交摘要、截断、日志），离线检查通过；**真实模型下的 Post-hook 效果待用户测试**
-- **阶段 5 评估（Task 9 Eval）**：代码已完成，离线检查通过（`python -m scripts.check_eval`）。`eval/record.py` 用 `eval/cases.json` 中的 10 个用例（含故意出错）录制 trace 到 `eval/traces/`；`eval/judge.py` 用 LLM-judge 打 1–5 分，结果写入 `eval/results.json`。**两者都需要真实模型调用，尚未运行**
-- **README**：`README.md` 已写好（安装、运行、架构、已知风险）
-- **brief 第 12 节与本节**：已于 2026-10-07 同步，阶段 3–6 均未勾选，等待真实测试与确认
-- **阶段 6 部署（Task 9 Deploy）**：`api/main.py` 已完成（`POST /webhook`、`POST /approve`、`GET /health`），离线检查通过（`python -m scripts.check_api`）。`Dockerfile` 与 `.dockerignore` 已写好，**未构建**（本机没有 Docker）。部署到 Render / HF Spaces 尚未做
-- **Langfuse 配置问题**：`.env` 中的密钥有效，但 `LANGFUSE_HOST` 为 `https://cloud.langfuse.com`，服务器返回 401。同一对密钥在 `https://us.cloud.langfuse.com` 上认证通过。需要用户把 `.env` 中的 `LANGFUSE_HOST` 改为美国区地址。离线检查已强制关闭追踪，不会发送 trace
-- **阶段 5（Task 8 观测）**：Langfuse 核心 SDK 的 `@observe` / `start_as_current_observation` 已接入（不装 `langchain` 包）。每个问题一个 trace，LLM 调用为 generation（模型名、token 用量），MCP `tools/call` 为 tool span（JSON-RPC 请求与响应）。**没有密钥时自动禁用**；**需要用户填写密钥后，在 Langfuse 界面中验证结构**。评估脚本见上文阶段 5 评估
-- **阶段 4（Task 7 压缩与检查点）**：代码已完成，离线检查通过（压缩切分不拆分工具调用对、长对话实际压缩、重启后同一 thread 恢复）；`cli.py` 启动与恢复路径已验证；**真实模型的多轮与重启测试待做**
-- **账户状态**：`data/portfolio.json` 当前为现金 99819.36、AAPL 1 股（阶段 3 批准测试的结果，已由用户确认保留）
-
----
-
-## 2. 环境信息
-
-- 项目路径：`D:\github\trading-agent`
-- Python：3.12.13（由 `uv` 下载安装）。系统默认的 `python` 是 3.14.5，**不要用**
-- 虚拟环境：`D:\github\trading-agent\.venv`，由 `python -m venv` 创建（自带 pip）
-- 激活（PowerShell）：`.\.venv\Scripts\Activate.ps1`。尚未测试该命令，如遇执行策略报错，需用户决定是否修改策略
-- 安装依赖时使用：`.\.venv\Scripts\python.exe -m pip install ...`
-- Git：分支 `main`，远程 origin 为 `https://github.com/hy86652/trading-agent`（私有仓库，账户 hy86652）
-- 已提交并推送：`fe5829f`（初始提交，阶段 0 相关文件）
-- 推送方式：`gh` 已安装并登录（账户 hy86652）。PowerShell 中若找不到 `gh`，需先刷新 PATH
-- Docker：未安装（部署阶段需要）
+- **Environment setup**: done
+- **Stage 0 (data and account preparation)**: done, self-checked, confirmed by the user
+- **Stage 1 (Tasks 1–3, minimal agent)**: done and confirmed by the user (real Gemini test: AAPL MA5 = 184.68, matching the CSV; offline graph check passed)
+- **Stage 2 (Task 4, MCP)**: done and confirmed by the user (real Gemini test: MA5 = 184.68)
+- **Stage 3 (Tasks 5–6, hooks and HITL)**: the pre-hook (400 validation, 20% cap, stop after 3 consecutive failures) and human approval are done and passed the user's tests. The post-tool hook is implemented (the user confirmed its three parts: fill summary, truncation, logging). The offline check passes. **The post-hook behaviour with the real model still needs the user's test.**
+- **Stage 5 evaluation (Task 9 Eval)**: code done, offline check passes (`python -m scripts.check_eval`). `eval/record.py` records traces to `eval/traces/` from the 10 cases in `eval/cases.json` (including deliberate errors). `eval/judge.py` scores them 1–5 with an LLM judge and writes `eval/results.json`. **Both need real model calls and have not been run yet.**
+- **README**: `README.md` is written (setup, running, architecture, known risks).
+- **Brief section 12 and this section**: synced on 2026-10-07. Stages 3–6 are not ticked yet, pending real tests and confirmation.
+- **Stage 6 deployment (Task 9 Deploy)**: `api/main.py` is done (`POST /webhook`, `POST /approve`, `GET /health`). The offline check passes (`python -m scripts.check_api`). `Dockerfile` and `.dockerignore` are written but **not built** (Docker is not installed on this machine). Deployment to Render / HF Spaces has not been done.
+- **Langfuse configuration issue**: the keys in `.env` are valid, but `LANGFUSE_HOST` is `https://cloud.langfuse.com`, and the server returns 401. The same keys authenticate successfully at `https://us.cloud.langfuse.com`. The user needs to change `LANGFUSE_HOST` in `.env` to the US region address. The offline checks force tracing off, so they send no traces.
+- **Stage 5 (Task 8 observability)**: Langfuse core SDK (`@observe` / `start_as_current_observation`) is integrated, without the `langchain` package. Each question is one trace. LLM calls are recorded as generations (model name and token usage). MCP `tools/call` is recorded as a tool span (JSON-RPC request and response). **Tracing is switched off automatically when there are no keys.** **Once the user fills in the keys, the structure must be verified in the Langfuse UI.** The evaluation script is described under Stage 5 evaluation above.
+- **Stage 4 (Task 7 compression and checkpoints)**: code done, offline check passes (compression keeps tool call/result pairs intact, long conversations are actually compressed, a restart resumes the same thread). The `cli.py` start and resume paths are verified. **Real-model multi-turn and restart tests are still to do.**
+- **Account state**: `data/portfolio.json` currently holds cash 99819.36 and 1 share of AAPL. This is the result of the stage 3 approval test, and the user confirmed keeping it.
 
 ---
 
-## 3. 文件清单
+## 2. Environment
 
-| 路径 | 说明 | 状态 |
+- Project path: `D:\github\trading-agent`
+- Python: 3.12.13 (installed by `uv`). The system default `python` is 3.14.5. **Do not use it.**
+- Virtual environment: `D:\github\trading-agent\.venv`, created with `python -m venv` (includes pip)
+- Activation (PowerShell): `.\.venv\Scripts\Activate.ps1`. Not yet tested. If the execution policy blocks it, the user decides whether to change the policy.
+- To install dependencies, use `.\.venv\Scripts\python.exe -m pip install ...`
+- Git: branch `main`, remote origin `https://github.com/hy86652/trading-agent` (private repository, account hy86652)
+- Committed and pushed: `fe5829f` (initial commit, stage 0 files)
+- Push method: `gh` is installed and logged in (account hy86652). If PowerShell cannot find `gh`, refresh PATH first.
+- Docker: not installed (needed for deployment)
+
+---
+
+## 3. File list
+
+| Path | Description | Status |
 |---|---|---|
-| `.env` | 密钥模板，值为空，由用户填写 | 已创建，**不读取、不打印** |
-| `.gitignore` | 忽略 `.venv/`、`.env`、`__pycache__/`、`*.db` | 已创建 |
-| `requirements.txt` | `pip freeze` 输出，91 个包 | 已生成 |
-| `scripts/gen_data.py` | 生成 5 个 ticker 的模拟行情 CSV | 已完成 |
-| `data/prices/*.csv` | AAPL、MSFT、NVDA、GOOGL、AMZN，各 100 行 | 已生成 |
-| `data/portfolio.json` | 模拟账户，初始现金 100,000，无持仓 | 已创建 |
-| `tools.py` | 4 个工具的普通 Python 版本，内置 `_self_test` | 已完成，自检通过 |
-| `agent/state.py` | AgentState（Task 1），字段与 brief 第 5 节一致 | 已完成 |
-| `agent/nodes.py` | reasoner（只决策）与 tool_exec（路由到 tools.py）、System Prompt | 已完成 |
-| `agent/graph.py` | reasoner ⇄ tool_exec 循环，工具来自 MCP Client | 已完成 |
-| `mcp_server/server.py` | MCP Server（stdio），注册全部 4 个工具 | 阶段 2 新增，离线通过 |
-| `agent/mcp_client.py` | MCP Client：启动 Server，`tools/list` 发现工具，`tools/call` 调用；后台线程桥接同步节点 | 阶段 2 新增，离线通过 |
-| `cli.py` | 终端入口，会话期间保持 MCP Server 运行；`build_llm()` 为唯一需改动的模型配置点 | 已完成，真实测试待配额恢复 |
-| `scripts/check_graph.py` | 用脚本化假 LLM 检查循环（启动真实 MCP Server，无需 key），运行：`python -m scripts.check_graph` | 已完成，通过 |
-| `PROGRESS.md` | 本文件 | — |
+| `.env` | Key file, filled in by the user | Created. **Never read or printed.** |
+| `.gitignore` | Ignores `.venv/`, `.env`, `__pycache__/`, `*.db`, `data/logs/` | Created |
+| `requirements.txt` | `pip freeze` output, 91 packages | Generated (Windows; includes `pywin32`) |
+| `Dockerfile`, `.dockerignore` | Container build for deployment | Written, not built |
+| `README.md` | Setup, running, architecture, known risks | Done |
+| `scripts/gen_data.py` | Generates mock daily prices for 5 tickers | Done |
+| `data/prices/*.csv` | AAPL, MSFT, NVDA, GOOGL, AMZN, 100 rows each | Generated |
+| `data/portfolio.json` | Simulated account. Starting cash 100,000 | Created |
+| `tools.py` | Plain Python versions of the 4 tools, with `_self_test` | Done, self-test passes |
+| `agent/state.py` | AgentState (Task 1), fields match brief section 5 | Done |
+| `agent/nodes.py` | Reasoner, tool executor, summarizer, human approval, system prompts | Done |
+| `agent/hooks.py` | Pre-tool hook (validation, 400 errors) and post-tool hook (summary, truncation, log) | Done |
+| `agent/graph.py` | Graph wiring and routing | Done |
+| `agent/mcp_client.py` | MCP client: starts the server, `tools/list`, `tools/call`, background event loop | Done, offline check passes |
+| `agent/observability.py` | Turns tracing off when no Langfuse keys are set | Done |
+| `mcp_server/server.py` | MCP server (stdio), registers all 4 tools | Done, offline check passes |
+| `cli.py` | Terminal entry point. Keeps the MCP server running for the session. `build_llm()` is the only place to change the model | Done. Real test pending |
+| `api/main.py` | FastAPI app: `/webhook`, `/approve`, `/health` | Done, offline check passes |
+| `eval/record.py`, `eval/judge.py`, `eval/cases.json` | Trace recording and LLM-judge scoring | Done, not run against the real model |
+| `scripts/check_graph.py` | Offline checks of the graph with a scripted LLM (starts the real MCP server, no key needed). Run: `python -m scripts.check_graph` | Done, passes |
+| `scripts/check_eval.py` | Offline checks of judge parsing, retries and recording. Run: `python -m scripts.check_eval` | Done, passes |
+| `scripts/check_api.py` | Offline checks of the API with TestClient. Run: `python -m scripts.check_api` | Done, passes |
+| `PROGRESS.md` | This file | — |
 
 ---
 
-## 4. 关键决策记录
+## 4. Key decisions
 
-| 日期 | 决策 | 原因 |
+| Date | Decision | Reason |
 |---|---|---|
-| 2026-10-05 | 项目放在 `D:\github\trading-agent`，不放在 `tradeing_agent` 内 | 避免嵌套 git 仓库；用户确认 |
-| 2026-10-05 | 使用 Python 3.12，不用系统默认的 3.14 | 项目要求 3.11/3.12，3.13 及以上不可用；用户确认 |
-| 2026-10-05 | 虚拟环境用 `python -m venv` 创建 | 自带 pip，便于按要求用 pip 安装 |
-| 2026-10-05 | 依赖按清单安装，`requirements.txt` 由 `pip freeze` 生成 | 用户要求；安装无冲突 |
-| 2026-10-05 | 行情为工作日（`bdate_range`），不排除美股节假日 | 模拟数据，节假日对练习无影响，属于简化 |
-| 2026-10-05 | 行情使用固定种子 42 与起始日 2026-01-02 | 保证重复生成结果一致 |
-| 2026-10-05 | ticker 白名单 = `data/prices/` 下的 CSV 文件名 | 防止路径穿越，且不需要额外配置 |
-| 2026-10-05 | 指标参数用字符串表示，如 `"MA5"`、`"RSI14"`；RSI 使用 Wilder 平滑 | 便于 LLM 直接传参；Wilder 是常用约定 |
-| 2026-10-05 | 工具错误统一返回 `{"error": "..."}` | 调用方只需检查一个键 |
-| 2026-10-05 | 阶段 0 的 `place_order` 立即成交，只做基本检查 | pre-hook 与 HITL 属于阶段 3，按计划分阶段实现 |
-| 2026-10-05 | 目录结构沿用 brief 第 8 节，但暂未创建 `mcp_server/`、`api/`、`eval/` | 按阶段逐步创建，不提前建空目录 |
-| 2026-10-05 | 阶段 1 只向 LLM 绑定 3 个只读工具，**不绑定 `place_order`** | 下单需先经过 pre-hook（Task 5）和 HITL（Task 6），提前开放有风险 |
-| 2026-10-05 | 工具函数直接用 `StructuredTool.from_function` 包装，不改 `tools.py` | 保持阶段 0 的函数签名稳定，MCP 迁移时更容易替换 |
-| 2026-10-05 | 工具执行错误（未知工具、参数错误）作为数据返回给 LLM，不抛异常 | 让 reasoner 能根据错误自我纠正（brief 第 4 节要求） |
-| 2026-10-05 | System Prompt 在每次调用时拼接，不写入 messages | 避免历史中重复累积 |
-| 2026-10-05 | LLM 默认模型名 `llama-3.3-70b-versatile`，**未核实当前 Groq 模型目录** | 提供方尚未确定；如选 Gemini 需改 `build_llm()` |
-| 2026-10-05 | 阶段 1 每个问题是独立运行，不保留对话历史 | 记忆与 checkpoint 属于阶段 4（Task 7） |
-| 2026-10-05 | LLM 提供方选定 Gemini，使用 `langchain-google-genai`，key 读取 `GOOGLE_API_KEY` | 用户选择；Groq 不再使用 |
-| 2026-10-05 | 阶段 2：Server 注册全部 4 个工具，Agent 只绑定 3 个只读工具（`READ_ONLY_TOOL_NAMES`），`tool_exec` 同样拒绝未绑定的工具 | 保留 place_order 的安全约束；阶段 3 在 Agent 端放开并加 pre-hook 与审批（用户确认） |
-| 2026-10-05 | MCP Client 在后台线程的事件循环中持有会话，对外提供同步的 `call()` | LangGraph 节点为同步函数，MCP SDK 为异步；SDK 的 stdio 传输要求进出 task group 在同一个 task 中完成 |
-| 2026-10-06 | 阶段 4：超过 10 条消息时压缩最旧的 8 条，切分点后移以免拆散工具调用与结果；压缩在每个问题开始、工具执行后、拒绝订单后检查 | brief 第 6 节；孤立的 tool 结果会导致模型 API 报错 |
-| 2026-10-07 | 阶段 6 审批方案：`/webhook` 遇到订单返回 `pending_approval`，`/approve` 完成审批（brief 第 10 节的第一个选项）；同一线程有待审批订单时 `/webhook` 返回 409 | 线上没有终端审批；用户未明确选择，按推荐方案实现，可改 |
-| 2026-10-07 | 没有 Langfuse 密钥时，或在离线检查中，关闭追踪（`LANGFUSE_TRACING_ENABLED=false`） | 密钥为空时 SDK 持续上报 401；离线检查不应发送 trace |
-| 2026-10-07 | Post-tool Hook 三项：成交摘要（place_order filled）、超过 4000 字符截断、每次工具调用写入 `data/logs/tool_calls.jsonl`（已 gitignore） | 用户确认；截断阈值先设大，因为当前输出很短 |
-| 2026-10-07 | Langfuse 采用核心 SDK（`observe`、`start_as_current_observation`），不装 `langchain` 包 | 用户选择方案 B；brief 禁止未提及的重量级依赖 |
-| 2026-10-07 | `cli.py` 在单个问题失败时打印简短错误并保持会话；配额错误不再退出程序 | 配额错误曾导致退出，问题被当成 shell 命令 |
-| 2026-10-06 | 阶段 4：一个会话 = 一个 thread，历史跨问题保留；`cli.py --thread <id>` 恢复会话；每个问题重置 pending_order、approval、error_count | 满足"同一 thread id 从上次状态继续"；error_count 不重置会导致恢复后误触发停止 |
-| 2026-10-05 | Server 的 `place_order` 在 Server 端仍可调用，但 Agent 不绑定；Server 的 stdout 只用于协议，不打印 | stdio 传输占用 stdout；安全由 Agent 端控制 |
-| 2026-10-05 | 模型名从 `gemini-2.5-flash` 改为 `gemini-3.8-flash` | 2.5-flash 对新用户返回 404，错误信息建议 3.8-flash；3.8-flash 测试通过 |
-| 2026-10-05 | `cli.py` 增加 `to_text()`，只取 Gemini 返回内容块中的文本 | Gemini 的 content 可能是列表，直接打印会显示原始结构 |
+| 2026-10-05 | The project lives in `D:\github\trading-agent`, not inside `tradeing_agent` | Avoids nested git repositories. Confirmed by the user |
+| 2026-10-05 | Use Python 3.12, not the system default 3.14 | The project requires 3.11/3.12; 3.13 and later are not usable. Confirmed by the user |
+| 2026-10-05 | Create the virtual environment with `python -m venv` | Includes pip, so installs follow the requirements |
+| 2026-10-05 | Install dependencies from a list; `requirements.txt` is generated with `pip freeze` | Requested by the user; the install had no conflicts |
+| 2026-10-05 | Market data uses weekdays (`bdate_range`) and ignores US market holidays | Mock data; holidays do not matter for practice. This is a simplification |
+| 2026-10-05 | Market data uses a fixed seed (42) and start date 2026-01-02 | Re-running the generator gives the same data |
+| 2026-10-05 | Ticker whitelist = the CSV file names in `data/prices/` | Prevents path traversal, and needs no extra configuration |
+| 2026-10-05 | Indicators are passed as strings, e.g. `"MA5"`, `"RSI14"`; RSI uses Wilder smoothing | Easy for the LLM to pass; Wilder is the common convention |
+| 2026-10-05 | Tool errors always return `{"error": "..."}` | The caller checks a single key |
+| 2026-10-05 | In stage 0, `place_order` fills immediately and only does basic checks | The pre-hook and HITL belong to stage 3, implemented in order |
+| 2026-10-05 | Stage 1 binds only the 3 read-only tools to the LLM, **not `place_order`** | Orders must pass the pre-hook (Task 5) and HITL (Task 6) first. Opening them early is risky |
+| 2026-10-05 | Tool functions are wrapped with `StructuredTool.from_function`; `tools.py` is unchanged | Keeps the stage 0 signatures stable, which makes the MCP migration easier |
+| 2026-10-05 | Tool execution errors (unknown tool, bad arguments) are returned to the LLM as data, not raised | Lets the reasoner correct itself (brief section 4) |
+| 2026-10-05 | The system prompt is built on every call, not stored in messages | Avoids repeated growth of the history |
+| 2026-10-05 | The default LLM was `llama-3.3-70b-versatile`, **not verified against the current Groq catalogue** | Provider undecided at the time. Replaced after choosing Gemini |
+| 2026-10-05 | Stage 1 runs each question independently, with no conversation history | Memory and checkpoints belong to stage 4 (Task 7) |
+| 2026-10-05 | LLM provider chosen: Gemini via `langchain-google-genai`, key read from `GOOGLE_API_KEY` | The user's choice. Groq is no longer used |
+| 2026-10-05 | Stage 2: the server registers all 4 tools; the agent binds only the 3 read-only tools (`READ_ONLY_TOOL_NAMES`), and `tool_exec` also rejects unbound tools | Keeps the `place_order` safety constraint. Stage 3 enables it in the agent with the pre-hook and approval (confirmed by the user) |
+| 2026-10-05 | The MCP client holds the session on an event loop in a background thread and exposes a synchronous `call()` | LangGraph nodes are synchronous; the MCP SDK is asynchronous. The SDK's stdio transport needs entry and exit in the same task |
+| 2026-10-05 | The server's `place_order` is still callable on the server side, but the agent does not bind it. The server's stdout is used only for the protocol and never printed to | stdio transport uses stdout; safety is enforced on the agent side |
+| 2026-10-05 | Model changed from `gemini-2.5-flash` to `gemini-3.8-flash` | 2.5-flash returned 404 for new users; the error message suggested 3.8-flash, which passed the test |
+| 2026-10-05 | `cli.py` gained `to_text()`, which keeps only the text parts of Gemini's content blocks | Gemini's content can be a list; printing it directly showed the raw structure |
+| 2026-10-06 | Stage 4: when the history exceeds 10 messages, the oldest 8 are compressed. The cut point moves forward so tool calls and results are never split. Compression is checked at the start of each question, after tool execution, and after a rejected order | brief section 6. An orphaned tool result makes the model API fail |
+| 2026-10-06 | Stage 4: one session = one thread, with history kept across questions. `cli.py --thread <id>` resumes a session. Each question resets pending_order, approval and error_count | Meets "continue from the last state with the same thread id". Not resetting error_count would trigger a false stop after a resume |
+| 2026-10-07 | Stage 6 approval design: `/webhook` returns `pending_approval` when an order needs a decision, and `/approve` completes it (the first option in brief section 10). A `/webhook` call on a thread with a pending order returns 409 | Online there is no terminal approval. The user did not choose explicitly, so the recommended option was implemented. Can be changed |
+| 2026-10-07 | Tracing is off when there are no Langfuse keys, and in the offline checks (`LANGFUSE_TRACING_ENABLED=false`) | With empty keys the SDK keeps reporting 401. Offline checks must not send traces |
+| 2026-10-07 | Post-tool hook, three parts: fill summary (`place_order` filled), truncation above 4000 characters, and each tool call written to `data/logs/tool_calls.jsonl` (gitignored) | Confirmed by the user. The truncation limit is set high because current outputs are short |
+| 2026-10-07 | Langfuse uses the core SDK (`observe`, `start_as_current_observation`), not the `langchain` package | The user chose option B. brief forbids dependencies it does not mention |
+| 2026-10-07 | `cli.py` prints a short error when one question fails and keeps the session running. Quota errors no longer exit the program | A quota error used to exit the program, and the next question was then run as a shell command |
+| 2026-10-07 | All project text converted to English: code comments and docstrings, user-facing messages, prompts, README, this log, and the test cases | The user asked for it. The agent's replies follow the language of the user's question, so Chinese questions still get Chinese answers |
 
 ---
 
-## 5. 待办与待确认事项
+## 5. Open items and decisions needed
 
-- [ ] **用户确认阶段 0 的结果**（确认前不进入阶段 1）
-- [ ] **LLM 提供方**：Groq 还是 Gemini，由用户在 `.env` 中决定。两个包都已安装，但尚未选定。**阻塞阶段 1 的真实测试**
-- [ ] **Groq 模型名核实**：`llama-3.3-70b-versatile` 未在线核实，首次真实运行时若报模型不存在，需改为当前可用模型
-- [ ] **Post-tool Hook 具体做哪几项**：brief 第 4 节要求实现前与用户确认
-- [x] **首次 git 提交与远程仓库**：已提交 `fe5829f` 并推送到私有仓库。`.env` 未被提交
-- [ ] **后续提交策略**：每个阶段结束后是否提交、推送，由用户决定
-- [ ] **Docker**：部署阶段（阶段 6）前需安装
-- [ ] **`PROJECT.md` 与 `project_brief.md`**：brief 第 8 节写的是 `PROJECT.md`，实际文件名是 `project_brief.md`。目前以 `project_brief.md` 为准
-- [ ] **项目位置**：brief 与项目分属两个目录。是否需要统一，待用户决定
-
----
-
-## 6. 工作约定（摘自 brief，保持提醒）
-
-- 严格按阶段顺序推进；每个阶段结束后汇报并等待确认
-- 不超出范围，不新增工具或未在 brief 中提及的重量级依赖
-- 不读取、打印、猜测或提交任何 API key；密钥只来自 `.env`
-- 不执行不可逆的外部操作（推送远程仓库、部署、注册账号等），需先请用户确认
-- 遇到需要决策的地方先停下来问用户
+- [x] **User confirmed stage 0 results**
+- [x] **LLM provider**: Gemini (chosen by the user)
+- [x] **Gemini model name**: `gemini-3.8-flash` (`gemini-2.5-flash` returned 404)
+- [ ] **Post-tool hook**: the three parts are implemented. Real-model testing by the user is pending
+- [x] **First git commit and remote**: `fe5829f` committed and pushed to the private repository. `.env` was not committed
+- [ ] **Commit strategy**: whether to commit and push after each stage is up to the user. Stages 2–6 are not committed yet
+- [ ] **Docker**: install before stage 6 deployment. The image has not been built
+- [ ] **`PROJECT.md` vs `project_brief.md`**: brief section 8 says `PROJECT.md`, but the file is `project_brief.md`. The latter is used
+- [ ] **Project location**: the brief and the project are in two directories. Whether to unify them is up to the user
+- [ ] **Langfuse host**: change `LANGFUSE_HOST` in `.env` to `https://us.cloud.langfuse.com` (the keys are valid there)
+- [ ] **Hosting decisions for stage 6**: choose Render or HF Spaces, and whether to accept the risk that checkpoints are lost on restart (or pay for persistent storage)
+- [ ] **Online approval access control**: `/approve` has no authentication yet
 
 ---
 
-## 7. 会话日志
+## 6. Working conventions (from the brief, kept as reminders)
+
+- Advance strictly in stage order. Report and wait for confirmation at the end of each stage
+- Do not expand scope, and do not add tools or heavy dependencies the brief does not mention
+- Never read, print, guess or commit any API key. Keys come only from `.env`
+- Do not perform irreversible external actions (pushing to a remote, deploying, registering accounts, etc.) without asking the user first
+- When a decision is needed, stop and ask the user
+
+---
+
+## 7. Session log
 
 - **2026-10-05**
-  - 完成环境搭建：Python 3.12 虚拟环境、依赖安装、`.env` / `.gitignore` / `requirements.txt`、`git init`
-  - 完成阶段 0：数据生成脚本、模拟账户、`tools.py` 及自检（全部通过）
-  - 在 `project_brief.md` 中勾选"环境搭建"
-  - 新建本文件 `PROGRESS.md`
-  - 安装 `gh`（2.102.0），用户完成登录后，创建私有仓库 `hy86652/trading-agent` 并推送 `main`（`fe5829f`）
-  - 用户确认阶段 0，开始阶段 1：完成 `agent/`（state、nodes、graph）、`cli.py`、`scripts/check_graph.py`；离线检查通过；`ChatGroq.bind_tools` 接受工具 schema。真实 LLM 测试待提供方与 key
-  - 用户选择 Gemini 并填写 `GOOGLE_API_KEY`。首次真实运行：`gemini-2.5-flash` 返回 404，改为 `gemini-3.8-flash`；一次 503（高负载）后重试成功
-  - 真实提问"AAPL 最近 5 日的 MA5"返回 184.68，与 CSV 计算结果一致。修复 `cli.py` 输出内容块列表的问题。用户确认阶段 1 完成。同步更新 `project_brief.md` 第 12 节：阶段 0、阶段 1 勾选。Gemini 免费档每日 20 次请求，本次测试中配额曾用完，等待恢复
-  - 开始阶段 2（MCP）：新增 `mcp_server/server.py`、`agent/mcp_client.py`；`nodes.py` 去掉硬编码工具字典；`graph.py`、`cli.py`、`scripts/check_graph.py` 改为通过 MCP Client 获取工具。离线检查通过；`bind_tools` 对 MCP 生成的 schema 转换正常；`cli.py` 启动与退出正常。真实 Gemini 测试待配额恢复
+  - Environment setup: Python 3.12 virtual environment, dependency installation, `.env` / `.gitignore` / `requirements.txt`, `git init`
+  - Stage 0: data generation script, simulated account, `tools.py` and its self-test (all passed)
+  - Ticked "environment setup" in `project_brief.md`
+  - Created this file, `PROGRESS.md`
+  - Installed `gh` (2.102.0). After the user logged in, created the private repository `hy86652/trading-agent` and pushed `main` (`fe5829f`)
+  - User confirmed stage 0. Started stage 1: `agent/` (state, nodes, graph), `cli.py`, `scripts/check_graph.py`. Offline check passed. `ChatGroq.bind_tools` accepted the tool schema. Real LLM test was pending a provider and key
+  - User chose Gemini and filled in `GOOGLE_API_KEY`. First real run: `gemini-2.5-flash` returned 404, changed to `gemini-3.8-flash`. One 503 (high demand), then the retry succeeded
+  - Real question "AAPL MA5 over the last 5 days" returned 184.68, matching the CSV calculation. Fixed `cli.py` printing a list of content blocks. User confirmed stage 1 complete. Ticked stages 0 and 1 in `project_brief.md` section 12. The Gemini free tier allows 20 requests per day; the quota ran out during testing and was waiting to reset
+  - Started stage 2 (MCP): added `mcp_server/server.py` and `agent/mcp_client.py`. Removed the hard-coded tool dictionary from `nodes.py`. `graph.py`, `cli.py` and `scripts/check_graph.py` now get tools through the MCP client. Offline check passed. `bind_tools` converted the MCP schema correctly. `cli.py` started and exited cleanly. Real Gemini test pending the quota

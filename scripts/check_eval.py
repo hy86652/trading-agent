@@ -30,7 +30,7 @@ class ScriptedLLM:
 
 
 def check_parse_judgement() -> None:
-    assert parse_judgement('好的：{"score": 4, "reason": "恢复良好"}') == {"score": 4, "reason": "恢复良好"}
+    assert parse_judgement('Sure: {"score": 4, "reason": "good recovery"}') == {"score": 4, "reason": "good recovery"}
     for bad in ['{"score": 6, "reason": "x"}', '{"score": true, "reason": "x"}', '{"score": 3, "reason": ""}', "no json here"]:
         try:
             parse_judgement(bad)
@@ -42,9 +42,9 @@ def check_parse_judgement() -> None:
 def check_judge_retries_bad_replies() -> None:
     """A malformed reply is retried; the first usable reply wins."""
     trace = {"id": "t", "question": "q", "transcript": [{"role": "human", "content": "q"}]}
-    llm = ScriptedLLM([AIMessage(content="不是 JSON"), AIMessage(content='{"score": 2, "reason": "未修正参数"}')])
+    llm = ScriptedLLM([AIMessage(content="not JSON"), AIMessage(content='{"score": 2, "reason": "did not fix arguments"}')])
     result = judge_trace(trace, llm, attempts=3, pause_seconds=0)
-    assert result == {"score": 2, "reason": "未修正参数"}, result
+    assert result == {"score": 2, "reason": "did not fix arguments"}, result
 
 
 def check_judge_gives_up_after_attempts() -> None:
@@ -62,22 +62,22 @@ def check_record_case(mcp: MCPToolClient) -> None:
     """A recorded case captures the whole conversation, including the rejected order."""
     llm = ScriptedLLM([
         AIMessage(content="", tool_calls=[{"name": "place_order", "args": {"ticker": "AAPL", "side": "buy", "quantity": 1}, "id": "c1"}]),
-        AIMessage(content="好的，已取消。"),
+        AIMessage(content="OK, cancelled."),
     ])
     graph = build_graph(llm, mcp, MemorySaver())
-    trace = record_case(graph, {"id": "x", "question": "买 1 股 AAPL", "decision": "reject"})
+    trace = record_case(graph, {"id": "x", "question": "Buy 1 share of AAPL", "decision": "reject"})
     roles = [row["role"] for row in trace["transcript"]]
     assert roles == ["human", "ai", "tool", "ai"], roles
     assert trace["transcript"][2]["tool"] == "place_order"
     assert "rejected" in trace["transcript"][2]["content"]
     text = render_trace(trace)
-    assert "助手调用工具：place_order" in text and "好的，已取消。" in text, text
+    assert "Assistant calls tools: place_order" in text and "OK, cancelled." in text, text
 
 
 def check_transcript_is_json_serialisable() -> None:
     from langchain_core.messages import HumanMessage
 
-    rows = transcript_from_messages([HumanMessage(content="问"), AIMessage(content="答")])
+    rows = transcript_from_messages([HumanMessage(content="question"), AIMessage(content="answer")])
     assert json.loads(json.dumps(rows, ensure_ascii=False)) == rows
 
 

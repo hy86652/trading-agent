@@ -92,7 +92,7 @@ def create_app(llm_factory: Callable[[], Any] = build_llm, checkpoint_path: Path
             app.state.service = AgentService(build_graph(llm_factory(), mcp, SqliteSaver(conn)))
             yield
 
-    app = FastAPI(title="模拟交易助手", lifespan=lifespan)
+    app = FastAPI(title="Simulated trading assistant", lifespan=lifespan)
 
     @app.get("/health")
     def health() -> dict[str, str]:
