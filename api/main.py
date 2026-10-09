@@ -112,6 +112,18 @@ def create_app(llm_factory: Callable[[], Any] = build_llm, checkpoint_path: Path
 
     app = FastAPI(title="Simulated trading assistant", lifespan=lifespan)
 
+    @app.get("/")
+    def root() -> dict[str, Any]:
+        return {
+            "service": "Simulated trading assistant",
+            "docs": "/docs",
+            "endpoints": {
+                "GET /health": "liveness check, no auth",
+                "POST /webhook": "ask a question, requires X-API-Key if API_TOKEN is set",
+                "POST /approve": "answer a pending order, requires X-API-Key if API_TOKEN is set",
+            },
+        }
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
