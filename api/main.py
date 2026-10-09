@@ -24,6 +24,7 @@ from typing import Any, Callable, Literal
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 from fastapi.security import APIKeyHeader
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
@@ -35,6 +36,8 @@ from agent.nodes import to_text
 from agent.observability import disable_tracing_without_keys
 from agent.runtime import CHECKPOINT_PATH, ROOT, build_llm, configure_logging, question_input
 
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -117,6 +120,7 @@ def create_app(llm_factory: Callable[[], Any] = build_llm, checkpoint_path: Path
         return {
             "service": "Simulated trading assistant",
             "docs": "/docs",
+            "ui": "/ui",
             "endpoints": {
                 "GET /health": "liveness check, no auth",
                 "POST /webhook": "ask a question, requires X-API-Key if API_TOKEN is set",
@@ -127,6 +131,10 @@ def create_app(llm_factory: Callable[[], Any] = build_llm, checkpoint_path: Path
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/ui")
+    def ui() -> FileResponse:
+        return FileResponse(STATIC_DIR / "ui.html")
 
     @app.post("/webhook", dependencies=[Depends(require_api_key)])
     def webhook(body: QuestionIn, request: Request) -> dict[str, Any]:

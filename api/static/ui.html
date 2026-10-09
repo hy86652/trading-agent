@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trading agent — test console</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  h1 { font-size: 1.25rem; }
+  label { display: block; margin-top: 1rem; font-weight: 600; font-size: 0.9rem; }
+  input, textarea { width: 100%; box-sizing: border-box; padding: 0.5rem; font-size: 0.95rem; margin-top: 0.25rem; }
+  textarea { height: 4.5rem; }
+  button { margin-top: 0.75rem; padding: 0.5rem 1rem; font-size: 0.95rem; cursor: pointer; }
+  pre { background: #f4f4f4; padding: 0.75rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  .row { display: flex; gap: 0.5rem; }
+  .row > div { flex: 1; }
+  #approval { display: none; margin-top: 1rem; padding: 0.75rem; border: 1px solid #d9a; background: #fff6fa; }
+  .muted { color: #666; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<h1>Trading agent — test console</h1>
+<p class="muted">Talks directly to this server's own /health, /webhook and /approve endpoints. The API key is kept only in this browser's localStorage.</p>
+
+<label>X-API-Key (leave empty if the server has no API_TOKEN set)</label>
+<input id="apiKey" type="password" placeholder="X-API-Key">
+
+<label>Question</label>
+<textarea id="question" placeholder="e.g. Buy 1 share of AAPL"></textarea>
+
+<label>Thread ID (optional — leave empty to start a new session)</label>
+<input id="threadId" placeholder="auto-generated if empty">
+
+<div class="row">
+  <div><button id="askBtn">Ask</button></div>
+  <div><button id="healthBtn">Check /health</button></div>
+</div>
+
+<div id="approval">
+  <div id="orderInfo"></div>
+  <div class="row">
+    <div><button id="approveBtn">Approve</button></div>
+    <div><button id="rejectBtn">Reject</button></div>
+  </div>
+</div>
+
+<label>Response</label>
+<pre id="output">(nothing yet)</pre>
+
+<script>
+const apiKeyEl = document.getElementById('apiKey');
+const questionEl = document.getElementById('question');
+const threadIdEl = document.getElementById('threadId');
+const outputEl = document.getElementById('output');
+const approvalEl = document.getElementById('approval');
+const orderInfoEl = document.getElementById('orderInfo');
+
+apiKeyEl.value = localStorage.getItem('apiKey') || '';
+apiKeyEl.addEventListener('input', () => localStorage.setItem('apiKey', apiKeyEl.value));
+
+function headers() {
+  const h = { 'Content-Type': 'application/json' };
+  if (apiKeyEl.value) h['X-API-Key'] = apiKeyEl.value;
+  return h;
+}
+
+function show(data) {
+  outputEl.textContent = JSON.stringify(data, null, 2);
+}
+
+function handleResult(data) {
+  show(data);
+  if (data.thread_id) threadIdEl.value = data.thread_id;
+  if (data.status === 'pending_approval') {
+    orderInfoEl.textContent = `Order: ${JSON.stringify(data.order)}  Amount: ${data.amount}`;
+    approvalEl.style.display = 'block';
+  } else {
+    approvalEl.style.display = 'none';
+  }
+}
+
+async function call(path, body) {
+  try {
+    const res = await fetch(path, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) {
+      show({ error: res.status, detail: data.detail || data });
+      return;
+    }
+    handleResult(data);
+  } catch (err) {
+    show({ error: String(err) });
+  }
+}
+
+document.getElementById('askBtn').addEventListener('click', () => {
+  const question = questionEl.value.trim();
+  if (!question) { show({ error: 'type a question first' }); return; }
+  call('/webhook', { question, thread_id: threadIdEl.value.trim() || null });
+});
+
+document.getElementById('approveBtn').addEventListener('click', () => {
+  call('/approve', { thread_id: threadIdEl.value.trim(), decision: 'approve' });
+});
+
+document.getElementById('rejectBtn').addEventListener('click', () => {
+  call('/approve', { thread_id: threadIdEl.value.trim(), decision: 'reject' });
+});
+
+document.getElementById('healthBtn').addEventListener('click', async () => {
+  try {
+    const res = await fetch('/health');
+    show(await res.json());
+  } catch (err) {
+    show({ error: String(err) });
+  }
+});
+</script>
+</body>
+</html>
