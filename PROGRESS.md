@@ -20,7 +20,7 @@
 - **Stage 6 deployment (Task 9 Deploy)**: `api/main.py` done, offline check passes. **Deployed live to Render on 2026-10-09** (`https://trading-agent-se9f.onrender.com`, user's own account, Docker build done by Render — no local Docker needed). `/health` returns 200. Added a `GET /` endpoint (service info and endpoint list) after the user found the bare root path returned 404, which is normal FastAPI behavior with no route defined for `/`.
 - **README / `.env.example`**: written and kept in sync with the code (setup, running, architecture, known risks, env var template).
 - **Account state**: `data/portfolio.json` holds cash 99819.36 and 1 share of AAPL (restored after the 2026-10-09 stage 3 live retest).
-- **Brief section 12**: all of stages 0–6 are now implemented and live-verified. Ticking section 12 for stages 3–6 is pending the user's explicit confirmation (see section 5).
+- **Brief section 12**: all of stages 0–6 are implemented, live-verified, and ticked. **The project is complete** per the brief's own checklist (see section 5 for a few low-priority housekeeping items that remain, none blocking).
 
 ---
 
@@ -142,7 +142,7 @@
 - [x] **Deploy to Render**: done 2026-10-09, `https://trading-agent-se9f.onrender.com`, `/health` verified live
 - [x] **Stage 4, turn 5 retest**: done live on 2026-10-09; confirmed correct
 - [x] **Stage 5 full evaluation run**: done live on 2026-10-09 (paid billing resolved the quota blocker); average 4.4/5, two real bugs found and fixed in the process (see section 4)
-- [ ] **Final confirmation pass**: all real-model verification above is now complete. Remaining: the user still needs to run a real `/webhook` request against the live Render deployment (has the `API_TOKEN`, which the assistant does not), and then give the go-ahead to tick stages 3–6 in `project_brief.md` section 12
+- [x] **Final confirmation pass**: done 2026-10-09. The user ran a real `/webhook` request against the live Render deployment through the `/ui` test console and confirmed it worked. Stages 3–6 ticked in `project_brief.md` section 12
 
 ---
 
@@ -178,4 +178,6 @@
   - Ran `eval/record.py` for the first time end-to-end and hit `GOOGLE_API_KEY` missing — found it never called `load_dotenv()`; fixed, reran, all 10 cases recorded cleanly with no retries
   - Ran `eval/judge.py`: average 4.4/5, but 3/10 cases showed spurious "ungrounded numbers". Traced it to the faithfulness checker's digit regex splitting comma-formatted numbers (e.g. "8,807,415") into several small numbers; fixed `eval/faithfulness.py` with a comma-aware token, added a regression test, reran the judge — down to 1/10, and that one case's flagged numbers are genuinely derived (not stated by any tool), which is correct behavior, not a bug
   - Committed: root endpoint, the two eval fixes, the regression test, and the real `eval/traces/*.json` + `eval/results.json` as evidence
-  - Updated `PROGRESS.md` sections 1, 3, 4 and 5 to reflect all of the above; `project_brief.md` section 12 not yet ticked, pending the user's go-ahead
+  - Updated `PROGRESS.md` sections 1, 3, 4 and 5 to reflect all of the above
+  - Noticed `api/main.py` and a new `api/static/ui.html` had changed on disk outside this session's own tool calls (same unexplained external sync pattern noted earlier in the project) — a small browser test console at `GET /ui`. Reviewed it, confirmed it was safe and useful, committed and pushed it (`ec3f9ef`)
+  - User tested the live Render deployment through `/ui` with their real `API_TOKEN` and confirmed it worked. Ticked stages 3–6 in `project_brief.md` section 12 — **the brief's checklist is now fully complete**
