@@ -134,6 +134,19 @@ def check_faithfulness() -> None:
     })
     assert reformatted == {"checked": 3, "ungrounded": [], "passed": True}, reformatted
 
+    # The tool gives a plain number; the model adds thousands separators. "8,807,415" must not read as
+    # three small numbers ("8", "807", "415").
+    comma_formatted = check({
+        "id": "f3",
+        "question": "What is the AAPL volume?",
+        "transcript": [
+            {"role": "human", "content": "What is the AAPL volume?"},
+            {"role": "tool", "tool": "get_price", "content": '{"bars": [{"volume": 8807415, "close": 99819.36}]}'},
+            {"role": "ai", "content": "Volume was 8,807,415 shares; cash on hand is $99,819.36."},
+        ],
+    })
+    assert comma_formatted == {"checked": 2, "ungrounded": [], "passed": True}, comma_formatted
+
 
 def check_langfuse_source() -> None:
     """A Langfuse trace is rebuilt into the same transcript shape the local recorder produces."""

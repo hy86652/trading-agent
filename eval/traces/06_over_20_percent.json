@@ -1,0 +1,34 @@
+{
+  "id": "06_over_20_percent",
+  "question": "Buy 500 shares of AAPL",
+  "decision": "reject",
+  "transcript": [
+    {
+      "role": "human",
+      "content": "Buy 500 shares of AAPL"
+    },
+    {
+      "role": "ai",
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "place_order",
+          "args": {
+            "quantity": 500,
+            "side": "buy",
+            "ticker": "AAPL"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\"status\": 400, \"error\": \"order amount 90320.0 exceeds 20% of total assets (limit 20000.0)\"}",
+      "tool": "place_order"
+    },
+    {
+      "role": "ai",
+      "content": "The order to buy 500 shares of AAPL could not be placed because the order value of $90,320.00 exceeds the 20% total assets limit ($20,000.00). \n\nBased on the current limit and price (~$180.64 per share), the maximum order size is approximately 110 shares. Please let me know if you would like to place an order for a smaller quantity."
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "id": "09_unsupported_indicator",
+  "question": "What is the MACD of AAPL?",
+  "decision": "reject",
+  "transcript": [
+    {
+      "role": "human",
+      "content": "What is the MACD of AAPL?"
+    },
+    {
+      "role": "ai",
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "get_indicators",
+          "args": {
+            "indicators": [
+              "MACD"
+            ],
+            "ticker": "AAPL"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\"error\": \"unsupported indicator 'MACD', supported: MA<n>, RSI<n>\"}",
+      "tool": "get_indicators"
+    },
+    {
+      "role": "ai",
+      "content": "I cannot provide the MACD for AAPL because the MACD indicator is currently not supported by the system. Only Moving Averages (e.g., MA5, MA20) and RSI indicators (e.g., RSI14) are supported."
+    }
+  ]
+}

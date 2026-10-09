@@ -1,0 +1,34 @@
+{
+  "id": "05_zero_quantity",
+  "question": "Buy 0 shares of NVDA",
+  "decision": "reject",
+  "transcript": [
+    {
+      "role": "human",
+      "content": "Buy 0 shares of NVDA"
+    },
+    {
+      "role": "ai",
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "place_order",
+          "args": {
+            "side": "buy",
+            "quantity": 0,
+            "ticker": "NVDA"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\"status\": 400, \"error\": \"quantity must be a positive integer\"}",
+      "tool": "place_order"
+    },
+    {
+      "role": "ai",
+      "content": "The order could not be placed because the quantity must be a positive integer (greater than 0). Please specify a valid quantity of shares you would like to buy."
+    }
+  ]
+}

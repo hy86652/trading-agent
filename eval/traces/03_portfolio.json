@@ -1,0 +1,30 @@
+{
+  "id": "03_portfolio",
+  "question": "How much money is in my account right now?",
+  "decision": "reject",
+  "transcript": [
+    {
+      "role": "human",
+      "content": "How much money is in my account right now?"
+    },
+    {
+      "role": "ai",
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "get_portfolio",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\"cash\": 99819.36, \"positions\": [{\"ticker\": \"AAPL\", \"quantity\": 1, \"last_price\": 180.64, \"market_value\": 180.64}], \"total_value\": 100000.0}",
+      "tool": "get_portfolio"
+    },
+    {
+      "role": "ai",
+      "content": "Your simulated account currently has:\n\n- **Available Cash:** $99,819.36\n- **Positions Market Value:** $180.64 (1 share of AAPL at $180.64)\n- **Total Account Value:** $100,000.00"
+    }
+  ]
+}

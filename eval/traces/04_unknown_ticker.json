@@ -1,0 +1,32 @@
+{
+  "id": "04_unknown_ticker",
+  "question": "What is the price of FAKE?",
+  "decision": "reject",
+  "transcript": [
+    {
+      "role": "human",
+      "content": "What is the price of FAKE?"
+    },
+    {
+      "role": "ai",
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "get_price",
+          "args": {
+            "ticker": "FAKE"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\"error\": \"unknown ticker 'FAKE', valid tickers: ['AAPL', 'AMZN', 'GOOGL', 'MSFT', 'NVDA']\"}",
+      "tool": "get_price"
+    },
+    {
+      "role": "ai",
+      "content": "The ticker **FAKE** is not recognized. The available tickers are: **AAPL**, **AMZN**, **GOOGL**, **MSFT**, and **NVDA**."
+    }
+  ]
+}

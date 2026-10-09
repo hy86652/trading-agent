@@ -1,0 +1,34 @@
+{
+  "id": "08_order_rejected",
+  "question": "Buy 1 share of AAPL",
+  "decision": "reject",
+  "transcript": [
+    {
+      "role": "human",
+      "content": "Buy 1 share of AAPL"
+    },
+    {
+      "role": "ai",
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "place_order",
+          "args": {
+            "side": "buy",
+            "ticker": "AAPL",
+            "quantity": 1
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\"status\": \"rejected\", \"error\": \"the user rejected this order; do not resubmit it unless asked\"}",
+      "tool": "place_order"
+    },
+    {
+      "role": "ai",
+      "content": "The order to buy 1 share of AAPL was rejected. I will not resubmit the order unless you request it again."
+    }
+  ]
+}

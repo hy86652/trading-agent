@@ -7,21 +7,25 @@ that is left to the LLM judge.
 import re
 from typing import Any
 
-# Digits not preceded by a letter, underscore, digit, dot or hyphen. This keeps labels such as "MA5" and
-# "RSI14" out, and keeps the parts of dates such as "2026-01-02" from being read as separate numbers.
-NUMBER = re.compile(r"(?<![A-Za-z_\d.\-])\d+(?:\.\d+)?")
-# Every run of digits, with no exclusions. Used only to build the set of "known" numbers from the question
-# and tool results: a source date "2026-01-02" must also ground an answer that reformats it as "January 2, 2026".
-ANY_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+# A comma-grouped number ("8,807,415", "99,819.36") read as one token, or else a plain run of digits not
+# preceded by a letter, underscore, digit, dot or hyphen. The exclusion keeps labels such as "MA5" and
+# "RSI14" out, and keeps the parts of dates such as "2026-01-02" from being read as separate numbers. Without
+# the comma alternative, answers that format tool numbers with thousands separators (e.g. "$99,819.36") would
+# split into several small numbers ("99", "819.36") that look ungrounded even though the value is correct.
+NUMBER = re.compile(r"(?<![A-Za-z_\d.\-])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?!\d)|(?<![A-Za-z_\d.\-])\d+(?:\.\d+)?")
+# Same comma-aware matching, with no exclusions. Used only to build the set of "known" numbers from the
+# question and tool results: a source date "2026-01-02" must also ground an answer that reformats it as
+# "January 2, 2026".
+ANY_NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?(?!\d)|\d+(?:\.\d+)?")
 TOLERANCE = 0.005  # tool values are rounded to 2 decimals; answers may round further
 
 
 def numbers_in(text: str) -> list[float]:
-    return [float(match) for match in NUMBER.findall(text)]
+    return [float(match.replace(",", "")) for match in NUMBER.findall(text)]
 
 
 def _known_numbers_in(text: str) -> list[float]:
-    return [float(match) for match in ANY_NUMBER.findall(text)]
+    return [float(match.replace(",", "")) for match in ANY_NUMBER.findall(text)]
 
 
 def final_answer(transcript: list[dict[str, Any]]) -> str:

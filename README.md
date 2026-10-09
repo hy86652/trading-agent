@@ -116,19 +116,19 @@ curl -X POST localhost:8000/approve -H "Content-Type: application/json" -d '{"th
 .\.venv\Scripts\python.exe -m eval.judge    # score the traces; results go to eval/results.json
 ```
 
-**Container** (not yet built or verified):
+**Container**: builds on Render (see below); not built or run locally (no Docker on the development machine).
 
 ```bash
 docker build -t trading-agent .
 docker run -p 7860:7860 -e GOOGLE_API_KEY=... -e API_TOKEN=... trading-agent
 ```
 
-**Deployment** (Render, free plan; not yet deployed). `render.yaml` is a Render Blueprint:
+**Deployment** (Render, free plan). `render.yaml` is a Render Blueprint, deployed live:
 
 1. In Render, create a Blueprint from this GitHub repository.
 2. Fill in the secrets that the Blueprint marks as manual: `GOOGLE_API_KEY`, and optionally `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`.
 3. Copy the generated `API_TOKEN` from the service's environment settings. Every request must send it in the `X-API-Key` header.
-4. Check the service with `GET /health`, which needs no token.
+4. Check the service with `GET /health`, which needs no token. `GET /` returns a short service description and endpoint list.
 
 On the free plan the disk is temporary: sessions and pending approvals are lost when the service restarts or redeploys.
 

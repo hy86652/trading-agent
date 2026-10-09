@@ -1,0 +1,33 @@
+{
+  "id": "01_price",
+  "question": "What is the current price of AAPL?",
+  "decision": "reject",
+  "transcript": [
+    {
+      "role": "human",
+      "content": "What is the current price of AAPL?"
+    },
+    {
+      "role": "ai",
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "get_price",
+          "args": {
+            "days": 1,
+            "ticker": "AAPL"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\"ticker\": \"AAPL\", \"bars\": [{\"date\": \"2026-05-21\", \"open\": 183.85, \"high\": 187.43, \"low\": 177.12, \"close\": 180.64, \"volume\": 8807415}]}",
+      "tool": "get_price"
+    },
+    {
+      "role": "ai",
+      "content": "The latest price for AAPL (as of 2026-05-21) is **$180.64** (Close). \n\nAdditional daily bar details:\n- **Open:** $183.85\n- **High:** $187.43\n- **Low:** $177.12\n- **Volume:** 8,807,415"
+    }
+  ]
+}

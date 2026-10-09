@@ -1,0 +1,35 @@
+{
+  "id": "02_ma5",
+  "question": "What is the 5-day moving average (MA5) of AAPL?",
+  "decision": "reject",
+  "transcript": [
+    {
+      "role": "human",
+      "content": "What is the 5-day moving average (MA5) of AAPL?"
+    },
+    {
+      "role": "ai",
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "get_indicators",
+          "args": {
+            "indicators": [
+              "MA5"
+            ],
+            "ticker": "AAPL"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\"ticker\": \"AAPL\", \"values\": {\"MA5\": 184.68}}",
+      "tool": "get_indicators"
+    },
+    {
+      "role": "ai",
+      "content": "The 5-day moving average (MA5) of AAPL is 184.68."
+    }
+  ]
+}

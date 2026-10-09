@@ -11,12 +11,14 @@ import time
 import uuid
 from pathlib import Path
 
+from dotenv import load_dotenv
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
 from agent.graph import build_graph
 from agent.mcp_client import MCPToolClient
-from agent.runtime import build_llm, question_input
+from agent.observability import disable_tracing_without_keys
+from agent.runtime import ROOT, build_llm, question_input
 from eval.judge import TRACE_DIR, transcript_from_messages
 
 CASES_PATH = Path(__file__).resolve().parent / "cases.json"
@@ -52,6 +54,8 @@ def record_with_retries(graph, case: dict, attempts: int = ATTEMPTS, pause_secon
 
 
 def main() -> None:
+    load_dotenv(ROOT / ".env")
+    disable_tracing_without_keys()
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
     TRACE_DIR.mkdir(parents=True, exist_ok=True)
     failed: list[str] = []

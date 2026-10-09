@@ -7,20 +7,20 @@
 
 ---
 
-## 1. Current status (last updated: 2026-10-08)
+## 1. Current status (last updated: 2026-10-09)
 
 - **Environment setup**: done.
 - **Stage 0 (data and account preparation)**: done, confirmed by the user.
 - **Stage 1 (Tasks 1–3, minimal agent)**: done, confirmed by the user, verified against the real model (AAPL MA5 = 184.68, matching the CSV).
 - **Stage 2 (Task 4, MCP)**: done, confirmed by the user, verified against the real model (MA5 = 184.68 via MCP).
-- **Stage 3 (Tasks 5–6, hooks and HITL)**: pre-hook (400 validation, 20% cap, stop after 3 consecutive failures), human approval, and the post-tool hook (fill summary, truncation, logging; the three parts the user confirmed) are all implemented and pass the offline check. The approve/reject flow was verified against the real model by the user (before the post-hook existed). The post-hook's general path (truncation, logging) ran live on 2026-10-07 as part of a read-only tool call. **Not yet verified live: the post-hook's order-fill summary on a real approved order** (it is covered by the offline check only). Not formally confirmed by the user or ticked in the brief.
-- **Stage 4 (Task 7, compression and checkpoints)**: done, offline check passes, and verified against the real model on 2026-10-08 with 4 questions in one thread, each one closing and reopening the MCP client and the SQLite connection to simulate a true process restart. History grew correctly, compression triggered and produced a correct summary (checked by eye), and all four prices (MSFT, NVDA, GOOGL, AMZN) matched `data/prices/*.csv` exactly. A 5th turn (pure memory recall from the summary, no new tool call) could not complete twice in a row because of the daily quota; low risk, since the summary content was already confirmed correct on the turns before it. Not formally confirmed by the user or ticked in the brief.
-- **Stage 5 observability (Task 8)**: Langfuse core SDK integrated (`@observe` / `start_as_current_observation`), without the `langchain` package. Verified live end-to-end on 2026-10-07: one real trace was sent, read back through the v2 observations endpoint (`eval/langfuse_source.py`), and correctly rebuilt into a transcript. `LANGFUSE_HOST` was fixed to the US region by the user; the legacy `/api/public/traces` endpoint returns 410 for this account, so reading uses v2 observations. Tracing switches off automatically without both keys.
-- **Stage 5 evaluation (Task 9 Eval)**: code done (`eval/record.py`, `eval/judge.py`, `eval/faithfulness.py`), offline check passes. The faithfulness check already caught and led to fixing one real bug, using the live trace above. **A full run (recording the 10 cases in `eval/cases.json` and scoring them) has not been done**; it needs roughly 20–30 more model calls, which the 20/day free tier cannot cover in one day. Paid billing was recommended to the user for this step.
-- **Stage 6 deployment (Task 9 Deploy)**: `api/main.py` (`/webhook`, `/approve`, `/health`, optional `API_TOKEN` auth) is done and passes the offline check. `Dockerfile` and `render.yaml` are written (Render was chosen; see decisions); the requirements-cleaning `sed` step was dry-run tested, but **the image has not been built** (no Docker on this machine) and **nothing has been deployed** (needs the user's Render account).
+- **Stage 3 (Tasks 5–6, hooks and HITL)**: pre-hook, human approval, and post-tool hook all implemented and pass the offline check. **Verified live end-to-end on 2026-10-09**: buying 1 share of AAPL through a real approved order moved cash from $99,819.36 to $99,638.72 (exactly `99819.36 − 180.64`), the position went from 1 to 2, and the post-hook's fill summary appeared correctly in the final answer. `data/portfolio.json` was restored to its pre-test value afterward.
+- **Stage 4 (Task 7, compression and checkpoints)**: done, offline check passes, verified against the real model on 2026-10-08 (4 questions, true process restarts, correct compression and summary). **Turn 5 (pure memory recall, no new tool call) completed live on 2026-10-09**: a fresh 5-turn thread asked for MSFT, NVDA, GOOGL and AMZN prices (all 4 matched `data/prices/*.csv` exactly), then "which stocks did I ask about" was answered correctly from the summary plus the still-unsummarized recent messages, with zero tool calls on that turn.
+- **Stage 5 observability (Task 8)**: Langfuse core SDK integrated, verified live end-to-end on 2026-10-07 (trace sent, read back via v2 observations, rebuilt correctly).
+- **Stage 5 evaluation (Task 9 Eval)**: **Full run completed live on 2026-10-09.** `eval/record.py` recorded all 10 cases in `eval/cases.json` with no retries needed; `eval/judge.py` scored them, average 4.4/5. Fixed a real bug found during this run: `eval/record.py` never called `load_dotenv()`, so `GOOGLE_API_KEY` was not loaded when run as `python -m eval.record` (only `judge.py` loaded it) — this is likely why the full run had never been completed before. Also fixed a second false-positive class in the faithfulness checker: numbers formatted with thousands separators (e.g. "8,807,415", "$99,819.36") were read as several small numbers instead of one; added a comma-aware token to both `NUMBER` and `ANY_NUMBER` in `eval/faithfulness.py`, plus a regression test in `scripts/check_eval.py`. After both fixes, 9/10 cases are fully grounded; the one remaining "ungrounded" case (`06_over_20_percent`) flags two genuinely derived numbers (an implied price and a max-share count computed by the model from the tool's error message, not stated verbatim by any tool) — a known, documented limitation of the deterministic checker, not a bug. Results saved to `eval/results.json` and committed, alongside `eval/traces/*.json`.
+- **Stage 6 deployment (Task 9 Deploy)**: `api/main.py` done, offline check passes. **Deployed live to Render on 2026-10-09** (`https://trading-agent-se9f.onrender.com`, user's own account, Docker build done by Render — no local Docker needed). `/health` returns 200. Added a `GET /` endpoint (service info and endpoint list) after the user found the bare root path returned 404, which is normal FastAPI behavior with no route defined for `/`.
 - **README / `.env.example`**: written and kept in sync with the code (setup, running, architecture, known risks, env var template).
-- **Account state**: `data/portfolio.json` currently holds cash 99819.36 and 1 share of AAPL, from the stage 3 approval test. The user confirmed keeping it.
-- **Brief section 12**: last synced 2026-10-07. Stages 3–6 are implemented but not yet ticked, pending the user's own confirmation pass (see section 5).
+- **Account state**: `data/portfolio.json` holds cash 99819.36 and 1 share of AAPL (restored after the 2026-10-09 stage 3 live retest).
+- **Brief section 12**: all of stages 0–6 are now implemented and live-verified. Ticking section 12 for stages 3–6 is pending the user's explicit confirmation (see section 5).
 
 ---
 
@@ -34,7 +34,7 @@
 - Git: branch `main`, remote origin `https://github.com/hy86652/trading-agent` (private repository, account hy86652)
 - Committed and pushed: `fe5829f` (initial commit, stage 0 files)
 - Push method: `gh` is installed and logged in (account hy86652). If PowerShell cannot find `gh`, refresh PATH first.
-- Docker: not installed (needed for deployment)
+- Docker: not installed, and not needed — Render builds the Dockerfile itself from the GitHub repo
 
 ---
 
@@ -46,8 +46,8 @@
 | `.gitignore` | Ignores `.venv/`, `.env`, `__pycache__/`, `*.db`, `data/logs/` | Created |
 | `.env.example` | Template listing the env var names (no values) for anyone cloning the repo | Done |
 | `requirements.txt` | `pip freeze` output, 91 packages | Generated (Windows; includes `pywin32`) |
-| `Dockerfile`, `.dockerignore` | Container build for deployment | Written; the requirements-cleaning `sed` step was dry-run tested, but the image itself is not built (no Docker on this machine) |
-| `render.yaml` | Render Blueprint: Docker web service, free plan, health check at `/health` | Written, not deployed |
+| `Dockerfile`, `.dockerignore` | Container build for deployment | Done. Built and deployed by Render on 2026-10-09; never built locally (no Docker on this machine) |
+| `render.yaml` | Render Blueprint: Docker web service, free plan, health check at `/health` | Done, deployed live on 2026-10-09 at `https://trading-agent-se9f.onrender.com` |
 | `README.md` | Setup, running, architecture, known risks | Done |
 | `scripts/gen_data.py` | Generates mock daily prices for 5 tickers | Done |
 | `data/prices/*.csv` | AAPL, MSFT, NVDA, GOOGL, AMZN, 100 rows each | Generated |
@@ -63,8 +63,8 @@
 | `mcp_server/server.py` | MCP server (stdio), registers all 4 tools | Done, offline check passes |
 | `cli.py` | Terminal entry point. Keeps the MCP server running for the session; supports `--thread` to resume | Done, verified against the real model (stages 2-4) |
 | `api/main.py` | FastAPI app: `/webhook`, `/approve`, `/health`. Optional `API_TOKEN` shared secret via the `X-API-Key` header | Done, offline check passes |
-| `eval/record.py`, `eval/judge.py`, `eval/cases.json` | Trace recording and LLM-judge scoring | Done, not run against the real model |
-| `eval/faithfulness.py` | Deterministic check: every number in the final answer must appear in the question or a tool result | Done, offline check passes |
+| `eval/record.py`, `eval/judge.py`, `eval/cases.json` | Trace recording and LLM-judge scoring | Done, full run against the real model completed 2026-10-09 (10/10 cases, average 4.4/5) |
+| `eval/faithfulness.py` | Deterministic check: every number in the final answer must appear in the question or a tool result | Done, offline check passes; comma-formatted numbers fixed 2026-10-09 |
 | `eval/langfuse_source.py` | Reads question traces from Langfuse (v2 observations API) and rebuilds the transcript for the judge. `python -m eval.judge --source langfuse` | Done. Offline check passes; verified live on 2026-10-07 (one real trace fetched and correctly rebuilt, faithfulness check passed after a fix) |
 | `scripts/check_graph.py` | Offline checks of the graph with a scripted LLM (starts the real MCP server, no key needed). Run: `python -m scripts.check_graph` | Done, passes |
 | `scripts/check_eval.py` | Offline checks of judge parsing, retries and recording. Run: `python -m scripts.check_eval` | Done, passes |
@@ -118,6 +118,9 @@
 | 2026-10-07 | Fixed a false positive in the faithfulness check: the "known" numbers from the question and tool results are now extracted with a permissive rule (plain digit runs, e.g. splitting "2026-05-21" into 2026/05/21), while numbers pulled out of the answer still use the strict rule. Only `_known_numbers_in` changed | Found on a real trace: the model wrote the tool's ISO date ("2026-05-21") as "May 21, 2026"; the strict rule did not recognize "21" from the hyphenated source, so a correct answer was flagged as ungrounded |
 | 2026-10-07 | Langfuse's `/api/public/traces` (both `list` and `get`) returns 410 for this organization; `eval/langfuse_source.py` reads only the v2 observations endpoint, including the root "question" span, which does appear there despite being the trace root | Confirmed live. There also appears to be an ingestion delay of roughly one to two minutes before a just-sent trace is queryable; query again after a short wait rather than assuming the data was lost |
 | 2026-10-07 | All project text converted to English: code comments and docstrings, user-facing messages, prompts, README, this log, and the test cases | The user asked for it. The agent's replies follow the language of the user's question, so Chinese questions still get Chinese answers |
+| 2026-10-09 | Added `GET /` to `api/main.py`, returning service info and an endpoint list | The user opened the bare Render URL and saw `{"detail":"Not Found"}`. Expected FastAPI behavior (no route was defined for `/`), but confusing without it |
+| 2026-10-09 | Fixed `eval/record.py`: it never called `load_dotenv()`, so `GOOGLE_API_KEY` was unset when run standalone (`python -m eval.record`) | Found while attempting the first full recording run; this is almost certainly why the full run had never completed before. `eval/judge.py` already loaded `.env` correctly |
+| 2026-10-09 | Fixed a second faithfulness-checker false positive: numbers with thousands separators ("8,807,415", "$99,819.36") were split into several small numbers by the digit-run regex. Added a comma-grouped alternative to `NUMBER` and `ANY_NUMBER` in `eval/faithfulness.py`, and strip commas before `float()` | Found on the real `01_price` and `03_portfolio` traces from the first full eval run; both were wrongly flagged as containing invented numbers |
 
 ---
 
@@ -127,19 +130,19 @@
 - [x] **LLM provider**: Gemini (chosen by the user)
 - [x] **Gemini model name**: `gemini-3.8-flash` (`gemini-2.5-flash` returned 404)
 - [x] **Post-tool hook**: the three parts are implemented and confirmed by the user; the general path (truncation, logging) ran live on 2026-10-07
-- [ ] **Post-tool hook, order-fill summary**: covered by the offline check only; still needs a live approved order to see the summary on a real fill
+- [x] **Post-tool hook, order-fill summary**: verified live on 2026-10-09 against a real approved order (see section 1)
 - [x] **First git commit and remote**: pushed to the private repository. `.env` was never committed (checked across the whole history)
 - [ ] **Commit strategy**: whether to commit and push after each stage is up to the user
-- [ ] **Docker**: not installed on this machine. Needed to build and verify the image before deploying
+- [x] **Docker**: not installed locally, and turned out not to be needed — Render builds the Dockerfile itself from the GitHub repo
 - [ ] **`PROJECT.md` vs `project_brief.md`**: brief section 8 says `PROJECT.md`, but the file is `project_brief.md`. The latter is used
 - [ ] **Project location**: the brief and the project are in two directories. Whether to unify them is up to the user
 - [x] **Langfuse host**: changed to `https://us.cloud.langfuse.com` by the user; verified live on 2026-10-07
 - [x] **Hosting decisions for stage 6**: Render (free plan) chosen. The checkpoint risk is accepted for now and documented in the README. Upgrading to persistent storage is a later option
 - [x] **Online access control**: `API_TOKEN` shared secret implemented (`X-API-Key`). Must be set before any public deployment
-- [ ] **Deploy to Render**: needs the user's Render account, the GitHub connection, and the secrets entered in the dashboard. Not done yet
-- [ ] **Stage 4, turn 5 retest**: the pure memory-recall question (no new tool call) still needs to run once quota allows; not expected to change the conclusion
-- [ ] **Stage 5 full evaluation run**: `eval/record.py` then `eval/judge.py` need roughly 30+ model calls total. The user is deciding between paid billing and spreading it over several days
-- [ ] **Final confirmation pass**: once the above are clear, the user plans one unified round of real-model testing covering whatever is still unconfirmed, before ticking stages 3–6 in the brief
+- [x] **Deploy to Render**: done 2026-10-09, `https://trading-agent-se9f.onrender.com`, `/health` verified live
+- [x] **Stage 4, turn 5 retest**: done live on 2026-10-09; confirmed correct
+- [x] **Stage 5 full evaluation run**: done live on 2026-10-09 (paid billing resolved the quota blocker); average 4.4/5, two real bugs found and fixed in the process (see section 4)
+- [ ] **Final confirmation pass**: all real-model verification above is now complete. Remaining: the user still needs to run a real `/webhook` request against the live Render deployment (has the `API_TOKEN`, which the assistant does not), and then give the go-ahead to tick stages 3–6 in `project_brief.md` section 12
 
 ---
 
@@ -165,3 +168,14 @@
   - User chose Gemini and filled in `GOOGLE_API_KEY`. First real run: `gemini-2.5-flash` returned 404, changed to `gemini-3.8-flash`. One 503 (high demand), then the retry succeeded
   - Real question "AAPL MA5 over the last 5 days" returned 184.68, matching the CSV calculation. Fixed `cli.py` printing a list of content blocks. User confirmed stage 1 complete. Ticked stages 0 and 1 in `project_brief.md` section 12. The Gemini free tier allows 20 requests per day; the quota ran out during testing and was waiting to reset
   - Started stage 2 (MCP): added `mcp_server/server.py` and `agent/mcp_client.py`. Removed the hard-coded tool dictionary from `nodes.py`. `graph.py`, `cli.py` and `scripts/check_graph.py` now get tools through the MCP client. Offline check passed. `bind_tools` converted the MCP schema correctly. `cli.py` started and exited cleanly. Real Gemini test pending the quota
+
+- **2026-10-09** — final unified test pass (stages 3–6 all verified live; see section 1 for details and section 4 for the two bugs fixed)
+  - User confirmed Gemini paid billing was enabled, resolving the quota blocker from 2026-10-07/08
+  - Deployed to Render: user set the env vars in the dashboard, Blueprint built and deployed the existing Dockerfile successfully; `/health` returned 200 on the first try
+  - User found the bare root URL returned `{"detail":"Not Found"}` — explained this is normal FastAPI behavior for an undefined route, then added a `GET /` endpoint anyway for a better first impression; committed and pushed (`3f77f84`), Render auto-redeployed
+  - Ran the stage 4 turn-5 memory retest on a fresh thread: all 4 prices matched the CSVs, turn 5 answered from memory with zero tool calls
+  - Ran the stage 3 post-hook order-fill retest: bought 1 AAPL through a real approval, cash and position math checked out exactly, `portfolio.json` restored afterward
+  - Ran `eval/record.py` for the first time end-to-end and hit `GOOGLE_API_KEY` missing — found it never called `load_dotenv()`; fixed, reran, all 10 cases recorded cleanly with no retries
+  - Ran `eval/judge.py`: average 4.4/5, but 3/10 cases showed spurious "ungrounded numbers". Traced it to the faithfulness checker's digit regex splitting comma-formatted numbers (e.g. "8,807,415") into several small numbers; fixed `eval/faithfulness.py` with a comma-aware token, added a regression test, reran the judge — down to 1/10, and that one case's flagged numbers are genuinely derived (not stated by any tool), which is correct behavior, not a bug
+  - Committed: root endpoint, the two eval fixes, the regression test, and the real `eval/traces/*.json` + `eval/results.json` as evidence
+  - Updated `PROGRESS.md` sections 1, 3, 4 and 5 to reflect all of the above; `project_brief.md` section 12 not yet ticked, pending the user's go-ahead

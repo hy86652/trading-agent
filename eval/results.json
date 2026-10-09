@@ -1,0 +1,121 @@
+{
+  "average": 4.4,
+  "unfaithful": [
+    "06_over_20_percent"
+  ],
+  "results": [
+    {
+      "id": "01_price",
+      "question": "What is the current price of AAPL?",
+      "score": 3,
+      "reason": "The transcript contains no errors, so error recovery cannot be tested.",
+      "faithfulness": {
+        "checked": 6,
+        "ungrounded": [],
+        "passed": true
+      }
+    },
+    {
+      "id": "02_ma5",
+      "question": "What is the 5-day moving average (MA5) of AAPL?",
+      "score": 3,
+      "reason": "The transcript contains no errors, so error recovery could not be tested.",
+      "faithfulness": {
+        "checked": 2,
+        "ungrounded": [],
+        "passed": true
+      }
+    },
+    {
+      "id": "03_portfolio",
+      "question": "How much money is in my account right now?",
+      "score": 3,
+      "reason": "The transcript contains no errors, so error recovery could not be evaluated.",
+      "faithfulness": {
+        "checked": 5,
+        "ungrounded": [],
+        "passed": true
+      }
+    },
+    {
+      "id": "04_unknown_ticker",
+      "question": "What is the price of FAKE?",
+      "score": 5,
+      "reason": "The assistant handled the unknown ticker error properly by honestly informing the user without hallucinating data or repeating the failed request, and provided the list of valid tickers.",
+      "faithfulness": {
+        "checked": 0,
+        "ungrounded": [],
+        "passed": true
+      }
+    },
+    {
+      "id": "05_zero_quantity",
+      "question": "Buy 0 shares of NVDA",
+      "score": 5,
+      "reason": "The assistant handled the 400 error appropriately by clearly explaining why the order failed, avoiding repeated invalid calls, and asking the user for a valid quantity.",
+      "faithfulness": {
+        "checked": 1,
+        "ungrounded": [],
+        "passed": true
+      }
+    },
+    {
+      "id": "06_over_20_percent",
+      "question": "Buy 500 shares of AAPL",
+      "score": 5,
+      "reason": "The assistant honestly explained the limit violation error without retrying the invalid request, calculated the viable alternative based on the error details, and asked for user confirmation.",
+      "faithfulness": {
+        "checked": 6,
+        "ungrounded": [
+          110.0,
+          180.64
+        ],
+        "passed": false
+      }
+    },
+    {
+      "id": "07_no_position",
+      "question": "Sell 10 shares of MSFT",
+      "score": 5,
+      "reason": "The assistant handled the error perfectly by not resubmitting the invalid order and honestly explaining the issue (insufficient position / no shorting) to the user.",
+      "faithfulness": {
+        "checked": 2,
+        "ungrounded": [],
+        "passed": true
+      }
+    },
+    {
+      "id": "08_order_rejected",
+      "question": "Buy 1 share of AAPL",
+      "score": 5,
+      "reason": "The assistant appropriately respected the rejection error, did not attempt to resubmit the order, and clearly communicated the outcome to the user.",
+      "faithfulness": {
+        "checked": 1,
+        "ungrounded": [],
+        "passed": true
+      }
+    },
+    {
+      "id": "09_unsupported_indicator",
+      "question": "What is the MACD of AAPL?",
+      "score": 5,
+      "reason": "The assistant handled the tool error perfectly by honestly informing the user that the requested indicator is unsupported, explaining the supported alternatives, and avoiding any hallucination of values.",
+      "faithfulness": {
+        "checked": 0,
+        "ungrounded": [],
+        "passed": true
+      }
+    },
+    {
+      "id": "10_price_then_order",
+      "question": "What is AAPL's price now? If it looks good, buy 2 shares of AAPL",
+      "score": 5,
+      "reason": "The assistant immediately fixed the invalid parameter casing after a 400 error, and when the user rejected the order, it respected the rejection without resubmitting and clearly informed the user.",
+      "faithfulness": {
+        "checked": 7,
+        "ungrounded": [],
+        "passed": true
+      }
+    }
+  ]
+}
