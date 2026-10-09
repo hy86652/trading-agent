@@ -62,7 +62,11 @@ To regenerate the mock prices (already in the repo; only needed if you want new 
 
 ## Configuration
 
-Create a `.env` file in the project root (do not commit it):
+Copy `.env.example` to `.env` and fill in the values (do not commit `.env`):
+
+```powershell
+Copy-Item .env.example .env
+```
 
 | Variable | Required | Description |
 |---|---|---|
@@ -70,7 +74,7 @@ Create a `.env` file in the project root (do not commit it):
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | No | Leave empty to disable tracing |
 | `LANGFUSE_HOST` | No | Host for the region your keys belong to, e.g. `https://us.cloud.langfuse.com` |
 
-`GROQ_API_KEY` appears in the `.env` template, but the code does not use it. Change the model name with `GEMINI_MODEL` in `cli.py`.
+`GROQ_API_KEY` is in `.env.example` for reference, but the code does not use it. Change the model name with `GEMINI_MODEL` in `agent/runtime.py`.
 
 ## Running
 

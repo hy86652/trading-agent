@@ -7,23 +7,20 @@
 
 ---
 
-## 1. Current status (last updated: 2026-10-07)
+## 1. Current status (last updated: 2026-10-08)
 
-- **Environment setup**: done
-- **Stage 0 (data and account preparation)**: done, self-checked, confirmed by the user
-- **Stage 1 (Tasks 1–3, minimal agent)**: done and confirmed by the user (real Gemini test: AAPL MA5 = 184.68, matching the CSV; offline graph check passed)
-- **Stage 2 (Task 4, MCP)**: done and confirmed by the user (real Gemini test: MA5 = 184.68)
-- **Stage 3 (Tasks 5–6, hooks and HITL)**: the pre-hook (400 validation, 20% cap, stop after 3 consecutive failures) and human approval are done and passed the user's tests. The post-tool hook is implemented (the user confirmed its three parts: fill summary, truncation, logging). The offline check passes. **The post-hook behaviour with the real model still needs the user's test.**
-- **Stage 5 evaluation (Task 9 Eval)**: code done, offline check passes (`python -m scripts.check_eval`). `eval/record.py` records traces to `eval/traces/` from the 10 cases in `eval/cases.json` (including deliberate errors). `eval/judge.py` scores them 1–5 with an LLM judge and writes `eval/results.json`. **Both need real model calls and have not been run yet.**
-- **README**: `README.md` is written (setup, running, architecture, known risks).
-- **Brief section 12 and this section**: synced on 2026-10-07. Stages 3–6 are not ticked yet, pending real tests and confirmation.
-- **Stage 6 deployment (Task 9 Deploy)**: `api/main.py` is done (`POST /webhook`, `POST /approve`, `GET /health`). The offline check passes (`python -m scripts.check_api`). `Dockerfile` and `.dockerignore` are written but **not built** (Docker is not installed on this machine). Deployment to Render / HF Spaces has not been done.
-- **Langfuse configuration issue**: the keys in `.env` are valid, but `LANGFUSE_HOST` is `https://cloud.langfuse.com`, and the server returns 401. The same keys authenticate successfully at `https://us.cloud.langfuse.com`. The user needs to change `LANGFUSE_HOST` in `.env` to the US region address. The offline checks force tracing off, so they send no traces.
-- **Stage 5 (Task 8 observability)**: Langfuse core SDK (`@observe` / `start_as_current_observation`) is integrated, without the `langchain` package. Each question is one trace. LLM calls are recorded as generations (model name and token usage). MCP `tools/call` is recorded as a tool span (JSON-RPC request and response). **Tracing is switched off automatically when there are no keys.** **Once the user fills in the keys, the structure must be verified in the Langfuse UI.** The evaluation script is described under Stage 5 evaluation above.
-- **Stage 4 (Task 7 compression and checkpoints)**: code done, offline check passes, **and now verified against the real model** (2026-10-08): 4 real questions (MSFT, NVDA, GOOGL, AMZN) in one thread, each turn closing and reopening the MCP client and the SQLite connection to simulate a real process restart. History grew correctly, compression triggered on turn 3 and produced a correct summary (verified by eye), and the summary did not interfere with later tool calls. All four prices matched `data/prices/*.csv` exactly. A 5th turn (pure memory recall, no new tool call) hit the daily quota and was not completed; not expected to behave differently.
-- **Account state**: `data/portfolio.json` currently holds cash 99819.36 and 1 share of AAPL. This is the result of the stage 3 approval test, and the user confirmed keeping it.
-- **2026-10-08 real test**: ran a true multi-restart test for stage 4 (see above). Hit the daily Gemini quota again partway through turn 5; one question costs 2 requests when it uses a tool (one to decide the tool call, one for the final answer after the result), plus 1 more on the turn that triggers compression, so the 20/day free limit is used up quickly.
-- **2026-10-07 real end-to-end test**: `LANGFUSE_HOST` was fixed to the US region by the user. One real question through `cli.py` ("What is the AAPL price?") worked fully: Gemini call, MCP tool call, post-hook summary, and a Langfuse trace. The answer (price, OHLC, date) matched `data/prices/AAPL.csv` exactly. Fetching the trace back with `eval/langfuse_source.py` and scoring it with `eval/faithfulness.py` found and led to fixing a real bug (see decisions). **All code paths touched by this test are now considered verified against the real model**, except multi-turn/compression, restart, and a full 10-trace evaluation run, which still need more quota.
+- **Environment setup**: done.
+- **Stage 0 (data and account preparation)**: done, confirmed by the user.
+- **Stage 1 (Tasks 1–3, minimal agent)**: done, confirmed by the user, verified against the real model (AAPL MA5 = 184.68, matching the CSV).
+- **Stage 2 (Task 4, MCP)**: done, confirmed by the user, verified against the real model (MA5 = 184.68 via MCP).
+- **Stage 3 (Tasks 5–6, hooks and HITL)**: pre-hook (400 validation, 20% cap, stop after 3 consecutive failures), human approval, and the post-tool hook (fill summary, truncation, logging; the three parts the user confirmed) are all implemented and pass the offline check. The approve/reject flow was verified against the real model by the user (before the post-hook existed). The post-hook's general path (truncation, logging) ran live on 2026-10-07 as part of a read-only tool call. **Not yet verified live: the post-hook's order-fill summary on a real approved order** (it is covered by the offline check only). Not formally confirmed by the user or ticked in the brief.
+- **Stage 4 (Task 7, compression and checkpoints)**: done, offline check passes, and verified against the real model on 2026-10-08 with 4 questions in one thread, each one closing and reopening the MCP client and the SQLite connection to simulate a true process restart. History grew correctly, compression triggered and produced a correct summary (checked by eye), and all four prices (MSFT, NVDA, GOOGL, AMZN) matched `data/prices/*.csv` exactly. A 5th turn (pure memory recall from the summary, no new tool call) could not complete twice in a row because of the daily quota; low risk, since the summary content was already confirmed correct on the turns before it. Not formally confirmed by the user or ticked in the brief.
+- **Stage 5 observability (Task 8)**: Langfuse core SDK integrated (`@observe` / `start_as_current_observation`), without the `langchain` package. Verified live end-to-end on 2026-10-07: one real trace was sent, read back through the v2 observations endpoint (`eval/langfuse_source.py`), and correctly rebuilt into a transcript. `LANGFUSE_HOST` was fixed to the US region by the user; the legacy `/api/public/traces` endpoint returns 410 for this account, so reading uses v2 observations. Tracing switches off automatically without both keys.
+- **Stage 5 evaluation (Task 9 Eval)**: code done (`eval/record.py`, `eval/judge.py`, `eval/faithfulness.py`), offline check passes. The faithfulness check already caught and led to fixing one real bug, using the live trace above. **A full run (recording the 10 cases in `eval/cases.json` and scoring them) has not been done**; it needs roughly 20–30 more model calls, which the 20/day free tier cannot cover in one day. Paid billing was recommended to the user for this step.
+- **Stage 6 deployment (Task 9 Deploy)**: `api/main.py` (`/webhook`, `/approve`, `/health`, optional `API_TOKEN` auth) is done and passes the offline check. `Dockerfile` and `render.yaml` are written (Render was chosen; see decisions); the requirements-cleaning `sed` step was dry-run tested, but **the image has not been built** (no Docker on this machine) and **nothing has been deployed** (needs the user's Render account).
+- **README / `.env.example`**: written and kept in sync with the code (setup, running, architecture, known risks, env var template).
+- **Account state**: `data/portfolio.json` currently holds cash 99819.36 and 1 share of AAPL, from the stage 3 approval test. The user confirmed keeping it.
+- **Brief section 12**: last synced 2026-10-07. Stages 3–6 are implemented but not yet ticked, pending the user's own confirmation pass (see section 5).
 
 ---
 
@@ -47,8 +44,10 @@
 |---|---|---|
 | `.env` | Key file, filled in by the user | Created. **Never read or printed.** |
 | `.gitignore` | Ignores `.venv/`, `.env`, `__pycache__/`, `*.db`, `data/logs/` | Created |
+| `.env.example` | Template listing the env var names (no values) for anyone cloning the repo | Done |
 | `requirements.txt` | `pip freeze` output, 91 packages | Generated (Windows; includes `pywin32`) |
-| `Dockerfile`, `.dockerignore` | Container build for deployment | Written, not built |
+| `Dockerfile`, `.dockerignore` | Container build for deployment | Written; the requirements-cleaning `sed` step was dry-run tested, but the image itself is not built (no Docker on this machine) |
+| `render.yaml` | Render Blueprint: Docker web service, free plan, health check at `/health` | Written, not deployed |
 | `README.md` | Setup, running, architecture, known risks | Done |
 | `scripts/gen_data.py` | Generates mock daily prices for 5 tickers | Done |
 | `data/prices/*.csv` | AAPL, MSFT, NVDA, GOOGL, AMZN, 100 rows each | Generated |
@@ -62,11 +61,11 @@
 | `agent/observability.py` | Tracing switch. Without keys, no Langfuse client is created; a no-op tracer is used instead | Done |
 | `agent/runtime.py` | Shared settings and helpers: model name, checkpoint path, `build_llm()`, `question_input()`, logging setup | Done |
 | `mcp_server/server.py` | MCP server (stdio), registers all 4 tools | Done, offline check passes |
-| `cli.py` | Terminal entry point. Keeps the MCP server running for the session. `build_llm()` is the only place to change the model | Done. Real test pending |
-| `api/main.py` | FastAPI app: `/webhook`, `/approve`, `/health` | Done, offline check passes |
+| `cli.py` | Terminal entry point. Keeps the MCP server running for the session; supports `--thread` to resume | Done, verified against the real model (stages 2-4) |
+| `api/main.py` | FastAPI app: `/webhook`, `/approve`, `/health`. Optional `API_TOKEN` shared secret via the `X-API-Key` header | Done, offline check passes |
 | `eval/record.py`, `eval/judge.py`, `eval/cases.json` | Trace recording and LLM-judge scoring | Done, not run against the real model |
 | `eval/faithfulness.py` | Deterministic check: every number in the final answer must appear in the question or a tool result | Done, offline check passes |
-| `eval/langfuse_source.py` | Reads question traces from Langfuse (v2 observations API) and rebuilds the transcript for the judge. `python -m eval.judge --source langfuse` | Done. Offline check passes; live call works (0 traces yet on the US account) |
+| `eval/langfuse_source.py` | Reads question traces from Langfuse (v2 observations API) and rebuilds the transcript for the judge. `python -m eval.judge --source langfuse` | Done. Offline check passes; verified live on 2026-10-07 (one real trace fetched and correctly rebuilt, faithfulness check passed after a fix) |
 | `scripts/check_graph.py` | Offline checks of the graph with a scripted LLM (starts the real MCP server, no key needed). Run: `python -m scripts.check_graph` | Done, passes |
 | `scripts/check_eval.py` | Offline checks of judge parsing, retries and recording. Run: `python -m scripts.check_eval` | Done, passes |
 | `scripts/check_api.py` | Offline checks of the API with TestClient. Run: `python -m scripts.check_api` | Done, passes |
@@ -127,16 +126,20 @@
 - [x] **User confirmed stage 0 results**
 - [x] **LLM provider**: Gemini (chosen by the user)
 - [x] **Gemini model name**: `gemini-3.8-flash` (`gemini-2.5-flash` returned 404)
-- [ ] **Post-tool hook**: the three parts are implemented. Real-model testing by the user is pending
-- [x] **First git commit and remote**: `fe5829f` committed and pushed to the private repository. `.env` was not committed
-- [ ] **Commit strategy**: whether to commit and push after each stage is up to the user. Stages 2–6 are not committed yet
-- [ ] **Docker**: install before stage 6 deployment. The image has not been built
+- [x] **Post-tool hook**: the three parts are implemented and confirmed by the user; the general path (truncation, logging) ran live on 2026-10-07
+- [ ] **Post-tool hook, order-fill summary**: covered by the offline check only; still needs a live approved order to see the summary on a real fill
+- [x] **First git commit and remote**: pushed to the private repository. `.env` was never committed (checked across the whole history)
+- [ ] **Commit strategy**: whether to commit and push after each stage is up to the user
+- [ ] **Docker**: not installed on this machine. Needed to build and verify the image before deploying
 - [ ] **`PROJECT.md` vs `project_brief.md`**: brief section 8 says `PROJECT.md`, but the file is `project_brief.md`. The latter is used
 - [ ] **Project location**: the brief and the project are in two directories. Whether to unify them is up to the user
-- [ ] **Langfuse host**: change `LANGFUSE_HOST` in `.env` to `https://us.cloud.langfuse.com` (the keys are valid there). Until this is changed, real traces are rejected with 401 and `--source langfuse` will find nothing
+- [x] **Langfuse host**: changed to `https://us.cloud.langfuse.com` by the user; verified live on 2026-10-07
 - [x] **Hosting decisions for stage 6**: Render (free plan) chosen. The checkpoint risk is accepted for now and documented in the README. Upgrading to persistent storage is a later option
 - [x] **Online access control**: `API_TOKEN` shared secret implemented (`X-API-Key`). Must be set before any public deployment
 - [ ] **Deploy to Render**: needs the user's Render account, the GitHub connection, and the secrets entered in the dashboard. Not done yet
+- [ ] **Stage 4, turn 5 retest**: the pure memory-recall question (no new tool call) still needs to run once quota allows; not expected to change the conclusion
+- [ ] **Stage 5 full evaluation run**: `eval/record.py` then `eval/judge.py` need roughly 30+ model calls total. The user is deciding between paid billing and spreading it over several days
+- [ ] **Final confirmation pass**: once the above are clear, the user plans one unified round of real-model testing covering whatever is still unconfirmed, before ticking stages 3–6 in the brief
 
 ---
 
